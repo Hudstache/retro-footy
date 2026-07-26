@@ -63,8 +63,65 @@ createFootball() {
     );
 
     this.playerHasBall = false;
-
     this.ballPickupDistance = 24;
+
+    /*
+     * Ball-flight information.
+     */
+    this.footballInFlight = false;
+    this.footballVelocityX = 0;
+    this.footballVelocityY = 0;
+
+    /*
+     * Drag-pass information.
+     */
+    this.isAimingPass = false;
+    this.aimPointerId = null;
+
+    this.aimStartX = 0;
+    this.aimStartY = 0;
+
+    this.aimCurrentX = 0;
+    this.aimCurrentY = 0;
+
+    /*
+     * Drag settings.
+     */
+    this.minimumPassDrag = 18;
+    this.maximumPassDrag = 140;
+
+    /*
+     * This is the temporary threshold between a handball
+     * and a kick.
+     *
+     * We will later tune this to represent approximately
+     * 15 metres on the field.
+     */
+    this.handballKickThreshold = 65;
+
+    /*
+     * Temporary on-screen label showing the selected action.
+     */
+    this.passTypeText = this.add.text(
+        GAME_WIDTH - 24,
+        64,
+        "",
+        {
+            fontFamily: "Courier New",
+            fontSize: "15px",
+            color: "#ffffff",
+            backgroundColor: "#222222",
+            padding: {
+                x: 8,
+                y: 5
+            }
+        }
+    ).setOrigin(1, 0);
+
+    /*
+     * Graphics used for the aiming line.
+     */
+    this.aimGraphics = this.add.graphics();
 }
 
 createKeyboardControls() {
@@ -75,14 +132,6 @@ createKeyboardControls() {
         down: Phaser.Input.Keyboard.KeyCodes.S,
         left: Phaser.Input.Keyboard.KeyCodes.A,
         right: Phaser.Input.Keyboard.KeyCodes.D
-    });
-
-    this.dropBallKey = this.input.keyboard.addKey(
-        Phaser.Input.Keyboard.KeyCodes.SPACE
-    );
-
-    this.dropBallKey.on("down", () => {
-        this.dropFootball();
     });
 }
 
@@ -149,29 +198,18 @@ createTouchControls() {
         "moveRight"
     );
 
-const dropBallButton = this.add.text(
-    GAME_WIDTH - 80,
-    GAME_HEIGHT - 45,
-    "DROP",
-    {
-        fontFamily: "Courier New",
-        fontSize: "18px",
-        color: "#ffffff",
-        backgroundColor: "#7a2d1f",
-        padding: {
-            x: 14,
-            y: 10
-        }
-    }
-).setOrigin(0.5).setInteractive();
-
-dropBallButton.on("pointerdown", () => {
-    this.dropFootball();
+this.input.on("pointerdown", (pointer) => {
+    this.beginPassAim(pointer);
 });
 
-    this.input.on("pointerup", () => {
-        this.resetTouchMovement();
-    });
+this.input.on("pointermove", (pointer) => {
+    this.updatePassAim(pointer);
+});
+
+this.input.on("pointerup", (pointer) => {
+    this.releasePassAim(pointer);
+    this.resetTouchMovement();
+});
 }
 
 configureMovementButton(button, movementProperty) {
@@ -193,6 +231,293 @@ resetTouchMovement() {
     this.moveRight = false;
     this.moveUp = false;
     this.moveDown = false;
+}
+
+beginPassAim(pointer) {
+    /*
+     * The player must have possession.
+     */
+    if (!this.playerHasBall) {
+        return;
+    }
+
+    /*
+     * Do not begin another pass while one is already being aimed.
+     */
+    if (this.isAimingPass) {
+        return;
+    }
+
+    /*
+     * Convert the pointer into game-world coordinates.
+     */
+    const pointerX = pointer.worldX;
+    const pointerY = pointer.worldY;
+
+    const distanceFromPlayer =
+        Phaser.Math.Distance.Between(
+            pointerX,
+            pointerY,
+            this.player.x,
+            this.player.y
+        );
+
+    /*
+     * The touch must start close to the player.
+     */
+    const aimStartDistance = 42;
+
+    if (distanceFromPlayer > aimStartDistance) {
+        return;
+    }
+
+    this.isAimingPass = true;
+    this.aimPointerId = pointer.id;
+
+    this.aimStartX = pointerX;
+    this.aimStartY = pointerY;
+
+    this.aimCurrentX = pointerX;
+    this.aimCurrentY = pointerY;
+
+    /*
+     * Stop movement while aiming.
+     */
+    this.resetTouchMovement();
+
+    this.drawPassAim();
+}
+
+updatePassAim(pointer) {
+    if (!this.isAimingPass) {
+        return;
+    }
+
+    if (pointer.id !== this.aimPointerId) {
+        return;
+    }
+
+    this.aimCurrentX = pointer.worldX;
+    this.aimCurrentY = pointer.worldY;
+
+    this.drawPassAim();
+}
+
+drawPassAim() {
+    this.aimGraphics.clear();
+
+    if (!this.isAimingPass) {
+        this.passTypeText.setText("");
+        return;
+    }
+
+    const dragX =
+        this.aimCurrentX - this.aimStartX;
+
+    const dragY =
+        this.aimCurrentY - this.aimStartY;
+
+    /*
+     * Horizontal drag controls power.
+     *
+     * Absolute value lets us test dragging either left or
+     * right during this early prototype.
+     */
+    const horizontalDrag =
+        Phaser.Math.Clamp(
+            Math.abs(dragX),
+            0,
+            this.maximumPassDrag
+        );
+
+    /*
+     * Vertical direction is inverted:
+     *
+     * Drag down = ball aims up
+     * Drag up   = ball aims down
+     */
+    const aimedVerticalOffset = -dragY;
+
+    const previewLength =
+        Phaser.Math.Linear(
+            35,
+            170,
+            horizontalDrag / this.maximumPassDrag
+        );
+
+    const previewEndX =
+        this.player.x + previewLength;
+
+    const previewEndY =
+        this.player.y +
+        Phaser.Math.Clamp(
+            aimedVerticalOffset,
+            -100,
+            100
+        );
+
+    const isKick =
+        horizontalDrag >= this.handballKickThreshold;
+
+    const lineColour =
+        isKick ? 0xffd43b : 0x66d9ff;
+
+    this.aimGraphics.lineStyle(
+        3,
+        lineColour,
+        1
+    );
+
+    this.aimGraphics.beginPath();
+
+    this.aimGraphics.moveTo(
+        this.player.x,
+        this.player.y
+    );
+
+    this.aimGraphics.lineTo(
+        previewEndX,
+        previewEndY
+    );
+
+    this.aimGraphics.strokePath();
+
+    /*
+     * Draw a small target marker.
+     */
+    this.aimGraphics.strokeCircle(
+        previewEndX,
+        previewEndY,
+        7
+    );
+
+    if (horizontalDrag < this.minimumPassDrag) {
+        this.passTypeText.setText("DRAG TO PASS");
+    } else if (isKick) {
+        this.passTypeText.setText("KICK");
+    } else {
+        this.passTypeText.setText("HANDBALL");
+    }
+}
+
+releasePassAim(pointer) {
+    if (!this.isAimingPass) {
+        return;
+    }
+
+    if (pointer.id !== this.aimPointerId) {
+        return;
+    }
+
+    this.aimCurrentX = pointer.worldX;
+    this.aimCurrentY = pointer.worldY;
+
+    const dragX =
+        this.aimCurrentX - this.aimStartX;
+
+    const dragY =
+        this.aimCurrentY - this.aimStartY;
+
+    const horizontalDrag =
+        Phaser.Math.Clamp(
+            Math.abs(dragX),
+            0,
+            this.maximumPassDrag
+        );
+
+    /*
+     * Cancel very small accidental drags.
+     */
+    if (horizontalDrag < this.minimumPassDrag) {
+        this.cancelPassAim();
+        return;
+    }
+
+    const isKick =
+        horizontalDrag >= this.handballKickThreshold;
+
+    this.launchFootball(
+        horizontalDrag,
+        dragY,
+        isKick
+    );
+
+    this.cancelPassAim();
+}
+
+cancelPassAim() {
+    this.isAimingPass = false;
+    this.aimPointerId = null;
+
+    this.aimGraphics.clear();
+    this.passTypeText.setText("");
+}
+
+launchFootball(horizontalDrag, verticalDrag, isKick) {
+    if (!this.playerHasBall) {
+        return;
+    }
+
+    this.playerHasBall = false;
+    this.footballInFlight = true;
+
+    /*
+     * Horizontal drag determines the percentage of maximum power.
+     */
+    const powerPercentage =
+        horizontalDrag / this.maximumPassDrag;
+
+    /*
+     * Kicks travel faster and farther than handballs.
+     */
+    const minimumSpeed = isKick ? 250 : 170;
+    const maximumSpeed = isKick ? 480 : 280;
+
+    const launchSpeed =
+        Phaser.Math.Linear(
+            minimumSpeed,
+            maximumSpeed,
+            powerPercentage
+        );
+
+    /*
+     * This prototype always attacks toward the right.
+     *
+     * Vertical drag is inverted.
+     */
+    const direction = new Phaser.Math.Vector2(
+        1,
+        Phaser.Math.Clamp(
+            -verticalDrag / 100,
+            -1,
+            1
+        )
+    );
+
+    direction.normalize();
+
+    this.football.x = this.player.x + 18;
+    this.football.y = this.player.y;
+
+    this.footballVelocityX =
+        direction.x * launchSpeed;
+
+    this.footballVelocityY =
+        direction.y * launchSpeed;
+
+    /*
+     * The football has a different outline while travelling.
+     */
+    this.football.setStrokeStyle(
+        2,
+        isKick ? 0xffd43b : 0x66d9ff
+    );
+
+    console.log(
+        isKick
+            ? "Player kicked the football."
+            : "Player handballed the football."
+    );
 }
 
 update(time, delta) {
@@ -253,13 +578,18 @@ update(time, delta) {
     this.player.y +=
         direction.y * moveDistance;
 
-    this.keepPlayerInsideField();
-    this.updateFootballPossession();
-    this.keepFootballInsideField();
+this.keepPlayerInsideField();
+this.updateFootballFlight(delta);
+this.updateFootballPossession();
+this.keepFootballInsideField();
 }
 
 updateFootballPossession() {
     if (!this.football) {
+        return;
+    }
+
+    if (this.footballInFlight) {
         return;
     }
 
@@ -280,6 +610,61 @@ updateFootballPossession() {
     if (distanceToBall <= this.ballPickupDistance) {
         this.takeFootballPossession();
     }
+}
+
+updateFootballFlight(delta) {
+    if (!this.footballInFlight) {
+        return;
+    }
+
+    const deltaSeconds = delta / 1000;
+
+    this.football.x +=
+        this.footballVelocityX * deltaSeconds;
+
+    this.football.y +=
+        this.footballVelocityY * deltaSeconds;
+
+    /*
+     * Apply gradual air resistance.
+     */
+    const dragPerSecond = 1.8;
+
+    const dragMultiplier =
+        Math.max(
+            0,
+            1 - dragPerSecond * deltaSeconds
+        );
+
+    this.footballVelocityX *= dragMultiplier;
+    this.footballVelocityY *= dragMultiplier;
+
+    const currentSpeed =
+        Math.sqrt(
+            this.footballVelocityX *
+            this.footballVelocityX +
+            this.footballVelocityY *
+            this.footballVelocityY
+        );
+
+    /*
+     * Stop the football once it becomes slow enough.
+     */
+    if (currentSpeed < 35) {
+        this.stopFootballFlight();
+    }
+}
+
+stopFootballFlight() {
+    this.footballInFlight = false;
+
+    this.footballVelocityX = 0;
+    this.footballVelocityY = 0;
+
+    this.football.setStrokeStyle(
+        2,
+        0xffffff
+    );
 }
 
 takeFootballPossession() {
@@ -397,6 +782,10 @@ keepFootballInsideField() {
     this.football.y =
         centreY +
         relativeY * correctionScale;
+
+        if (this.footballInFlight) {
+    this.stopFootballFlight();
+}
 }
 
 createGround() {
