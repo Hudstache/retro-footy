@@ -1,0 +1,137 @@
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+
+    overflow: hidden;
+
+    background: #171717;
+}
+
+body {
+    position: fixed;
+    inset: 0;
+
+    touch-action: none;
+    overscroll-behavior: none;
+
+    -webkit-user-select: none;
+    user-select: none;
+
+    -webkit-tap-highlight-color: transparent;
+}
+
+#game-page {
+    width: 100%;
+    height: 100%;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    padding-top: env(safe-area-inset-top);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+
+    background: #171717;
+}
+
+#game-container {
+    width: 100%;
+    height: 100%;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    overflow: hidden;
+}
+
+#game-container canvas {
+    display: block;
+
+    max-width: 100%;
+    max-height: 100%;
+
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+
+    touch-action: none;
+}
+
+/*
+ * Portrait rotation notice
+ */
+
+#rotate-message {
+    display: none;
+
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+
+    align-items: center;
+    justify-content: center;
+
+    padding-top: max(24px, env(safe-area-inset-top));
+    padding-right: max(24px, env(safe-area-inset-right));
+    padding-bottom: max(24px, env(safe-area-inset-bottom));
+    padding-left: max(24px, env(safe-area-inset-left));
+
+    background: #171717;
+    color: #ffffff;
+
+    font-family: "Courier New", Courier, monospace;
+    text-align: center;
+}
+
+#rotate-message h1 {
+    margin: 0 0 24px;
+
+    font-size: 32px;
+    letter-spacing: 3px;
+}
+
+#rotate-message p {
+    margin: 10px 0;
+
+    font-size: 18px;
+    line-height: 1.5;
+}
+
+/*
+ * Portrait mode:
+ * hide the game and show the rotation message.
+ */
+
+@media screen and (orientation: portrait) {
+    #rotate-message {
+        display: flex;
+    }
+
+    #game-container {
+        display: none;
+    }
+}
+
+/*
+ * Landscape mode:
+ * show the game and hide the rotation message.
+ */
+
+@media screen and (orientation: landscape) {
+    #rotate-message {
+        display: none;
+    }
+
+    #game-container {
+        display: flex;
+    }
+}
