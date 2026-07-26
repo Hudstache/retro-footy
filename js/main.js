@@ -57,51 +57,47 @@ createFootball() {
         0x9a5a2b
     );
 
-    this.football.setStrokeStyle(
-        2,
-        0xffffff
-    );
+    this.football.setStrokeStyle(2, 0xffffff);
 
+    // Possession
     this.playerHasBall = false;
     this.ballPickupDistance = 24;
 
-    /*
-     * Ball-flight information.
-     */
+    // Ball movement
     this.footballInFlight = false;
     this.footballVelocityX = 0;
     this.footballVelocityY = 0;
 
-    /*
-     * Drag-pass information.
-     */
+    // Drag aiming
     this.isAimingPass = false;
     this.aimPointerId = null;
 
     this.aimStartX = 0;
     this.aimStartY = 0;
-
     this.aimCurrentX = 0;
     this.aimCurrentY = 0;
 
-    /*
-     * Drag settings.
-     */
     this.minimumPassDrag = 18;
     this.maximumPassDrag = 140;
 
-    /*
-     * This is the temporary threshold between a handball
-     * and a kick.
-     *
-     * We will later tune this to represent approximately
-     * 15 metres on the field.
-     */
+    // Short drag = handball, long drag = kick.
     this.handballKickThreshold = 65;
 
+    // Automatic bounce tracking.
+    this.distanceRunWithBall = 0;
+
     /*
-     * Temporary on-screen label showing the selected action.
+     * The ground is approximately 160 metres long.
+     * This converts 15 metres into the current field's pixel scale.
      */
+    this.maximumRunDistance =
+        this.field.horizontalRadius * 2 * (15 / 160);
+
+    this.isBallBouncing = false;
+    this.ballBounceTimer = 0;
+    this.ballBounceDuration = 300;
+
+    // Pass label
     this.passTypeText = this.add.text(
         GAME_WIDTH - 24,
         64,
@@ -118,9 +114,7 @@ createFootball() {
         }
     ).setOrigin(1, 0);
 
-    /*
-     * Graphics used for the aiming line.
-     */
+    // Aiming line
     this.aimGraphics = this.add.graphics();
 }
 
@@ -572,16 +566,102 @@ update(time, delta) {
     const moveDistance =
         this.playerSpeed * (delta / 1000);
 
-    this.player.x +=
-        direction.x * moveDistance;
+const previousPlayerX = this.player.x;
+const previousPlayerY = this.player.y;
 
-    this.player.y +=
-        direction.y * moveDistance;
+this.player.x +=
+    direction.x * moveDistance;
+
+this.player.y +=
+    direction.y * moveDistance;
+
+const actualDistanceMoved =
+    Phaser.Math.Distance.Between(
+        previousPlayerX,
+        previousPlayerY,
+        this.player.x,
+        this.player.y
+    );
+
+this.updateAutomaticBounce(
+    actualDistanceMoved,
+    delta
+);
 
 this.keepPlayerInsideField();
 this.updateFootballFlight(delta);
 this.updateFootballPossession();
 this.keepFootballInsideField();
+}
+
+updateAutomaticBounce(distanceMoved, delta) {
+    if (!this.playerHasBall) {
+        this.distanceRunWithBall = 0;
+        return;
+    }
+
+    if (this.isAimingPass) {
+        return;
+    }
+
+    if (this.isBallBouncing) {
+        this.updateBallBounceAnimation(delta);
+        return;
+    }
+
+    this.distanceRunWithBall += distanceMoved;
+
+    if (
+        this.distanceRunWithBall >=
+        this.maximumRunDistance
+    ) {
+        this.startAutomaticBounce();
+    }
+}
+
+startAutomaticBounce() {
+    if (!this.playerHasBall) {
+        return;
+    }
+
+    this.isBallBouncing = true;
+    this.ballBounceTimer = 0;
+    this.distanceRunWithBall = 0;
+
+    console.log("Player automatically bounced the football.");
+}
+
+updateBallBounceAnimation(delta) {
+    this.ballBounceTimer += delta;
+
+    const progress =
+        Phaser.Math.Clamp(
+            this.ballBounceTimer /
+            this.ballBounceDuration,
+            0,
+            1
+        );
+
+    /*
+     * The football moves down toward the ground and
+     * then returns to the player's hand.
+     */
+    const bounceCurve =
+        Math.sin(progress * Math.PI);
+
+    this.football.x = this.player.x + 10;
+    this.football.y =
+        this.player.y +
+        2 +
+        bounceCurve * 20;
+
+    if (progress >= 1) {
+        this.isBallBouncing = false;
+        this.ballBounceTimer = 0;
+
+        this.football.x = this.player.x + 10;
+        this.football.y = this.player.y + 2;
+    }
 }
 
 updateFootballPossession() {
@@ -594,18 +674,21 @@ updateFootballPossession() {
     }
 
     if (this.playerHasBall) {
-        this.football.x = this.player.x + 10;
-        this.football.y = this.player.y + 2;
+        if (!this.isBallBouncing) {
+            this.football.x = this.player.x + 10;
+            this.football.y = this.player.y + 2;
+        }
 
         return;
     }
 
-    const distanceToBall = Phaser.Math.Distance.Between(
-        this.player.x,
-        this.player.y,
-        this.football.x,
-        this.football.y
-    );
+    const distanceToBall =
+        Phaser.Math.Distance.Between(
+            this.player.x,
+            this.player.y,
+            this.football.x,
+            this.football.y
+        );
 
     if (distanceToBall <= this.ballPickupDistance) {
         this.takeFootballPossession();
@@ -669,6 +752,8 @@ stopFootballFlight() {
 
 takeFootballPossession() {
     this.playerHasBall = true;
+    this.distanceRunWithBall = 0;
+    this.isBallBouncing = false;
 
     this.football.setStrokeStyle(
         2,
