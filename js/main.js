@@ -640,6 +640,7 @@ this.updateAutomaticBounce(
 
 this.keepPlayerInsideField();
 this.updateTeammateSupport(delta);
+this.updateOpponentChase(delta);
 this.updateFootballFlight(delta);
 this.updateFootballPossession();
 this.keepFootballInsideField();
@@ -734,6 +735,71 @@ updateTeammateSupport(delta) {
 
     this.teammate.y +=
         directionToTarget.y * movementDistance;
+}
+
+updateOpponentChase(delta) {
+    if (!this.opponent || !this.player) {
+        return;
+    }
+
+    /*
+     * For now, the opponent only chases when the
+     * controlled player has possession.
+     */
+    if (!this.playerHasBall) {
+        this.opponentData.state = "WAIT";
+        return;
+    }
+
+    this.opponentData.state = "CHASE";
+
+    /*
+     * The opponent targets the controlled player's
+     * current position.
+     */
+    const targetX = this.player.x;
+    const targetY = this.player.y;
+
+    this.opponentData.targetX = targetX;
+    this.opponentData.targetY = targetY;
+
+    const directionToPlayer =
+        new Phaser.Math.Vector2(
+            targetX - this.opponent.x,
+            targetY - this.opponent.y
+        );
+
+    const distanceToPlayer =
+        directionToPlayer.length();
+
+    /*
+     * Stop before completely overlapping the player.
+     * Tackling will be added in a later step.
+     */
+    const pressureDistance = 28;
+
+    if (distanceToPlayer <= pressureDistance) {
+        return;
+    }
+
+    directionToPlayer.normalize();
+
+    const deltaSeconds = delta / 1000;
+
+    const maximumMovement =
+        this.opponentData.speed * deltaSeconds;
+
+    const movementDistance =
+        Math.min(
+            maximumMovement,
+            distanceToPlayer - pressureDistance
+        );
+
+    this.opponent.x +=
+        directionToPlayer.x * movementDistance;
+
+    this.opponent.y +=
+        directionToPlayer.y * movementDistance;
 }
 
 updateAutomaticBounce(distanceMoved, delta) {
