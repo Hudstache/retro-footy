@@ -67,7 +67,7 @@ createTeammate() {
     this.teammateData = {
         team: "home",
         state: "SUPPORT",
-        speed: 135,
+        speed: 145,
         targetX: this.teammate.x,
         targetY: this.teammate.y,
         hasBall: false
@@ -91,7 +91,7 @@ createOpponent() {
     this.opponentData = {
         team: "away",
         state: "CHASE",
-        speed: 125,
+        speed: 135,
         targetX: this.opponent.x,
         targetY: this.opponent.y,
         hasBall: false
@@ -683,20 +683,17 @@ updateTeammateSupport(delta) {
      * game area. We will add proper oval boundary
      * movement in Step 12E.
      */
-    targetX = Phaser.Math.Clamp(
+const correctedTarget =
+    this.getPointInsideOval(
         targetX,
-        40,
-        GAME_WIDTH - 40
+        targetY
     );
 
-    targetY = Phaser.Math.Clamp(
-        targetY,
-        95,
-        GAME_HEIGHT - 40
-    );
+targetX = correctedTarget.x;
+targetY = correctedTarget.y;
 
-    this.teammateData.targetX = targetX;
-    this.teammateData.targetY = targetY;
+this.teammateData.targetX = targetX;
+this.teammateData.targetY = targetY;
 
     const directionToTarget =
         new Phaser.Math.Vector2(
@@ -713,9 +710,10 @@ updateTeammateSupport(delta) {
      */
     const stoppingDistance = 4;
 
-    if (distanceToTarget <= stoppingDistance) {
-        return;
-    }
+if (distanceToTarget <= stoppingDistance) {
+    this.keepObjectInsideOval(this.teammate);
+    return;
+}
 
     directionToTarget.normalize();
 
@@ -735,6 +733,8 @@ updateTeammateSupport(delta) {
 
     this.teammate.y +=
         directionToTarget.y * movementDistance;
+
+        this.keepObjectInsideOval(this.teammate);
 }
 
 updateOpponentChase(delta) {
@@ -746,10 +746,11 @@ updateOpponentChase(delta) {
      * For now, the opponent only chases when the
      * controlled player has possession.
      */
-    if (!this.playerHasBall) {
-        this.opponentData.state = "WAIT";
-        return;
-    }
+if (!this.playerHasBall) {
+    this.opponentData.state = "WAIT";
+    this.keepObjectInsideOval(this.opponent);
+    return;
+}
 
     this.opponentData.state = "CHASE";
 
@@ -778,9 +779,10 @@ updateOpponentChase(delta) {
      */
     const pressureDistance = 28;
 
-    if (distanceToPlayer <= pressureDistance) {
-        return;
-    }
+if (distanceToPlayer <= pressureDistance) {
+    this.keepObjectInsideOval(this.opponent);
+    return;
+}
 
     directionToPlayer.normalize();
 
@@ -800,6 +802,124 @@ updateOpponentChase(delta) {
 
     this.opponent.y +=
         directionToPlayer.y * movementDistance;
+
+        this.keepObjectInsideOval(this.opponent);
+}
+
+getPointInsideOval(x, y) {
+    const {
+        centreX,
+        centreY,
+        horizontalRadius,
+        verticalRadius
+    } = this.field;
+
+    /*
+     * The teammate is 22 pixels wide and 30 pixels tall.
+     * These margins keep the whole rectangle inside the oval.
+     */
+    const horizontalPadding = 14;
+    const verticalPadding = 18;
+
+    const allowedHorizontalRadius =
+        horizontalRadius - horizontalPadding;
+
+    const allowedVerticalRadius =
+        verticalRadius - verticalPadding;
+
+    const relativeX = x - centreX;
+    const relativeY = y - centreY;
+
+    const ellipseValue =
+        (relativeX * relativeX) /
+            (
+                allowedHorizontalRadius *
+                allowedHorizontalRadius
+            ) +
+        (relativeY * relativeY) /
+            (
+                allowedVerticalRadius *
+                allowedVerticalRadius
+            );
+
+    if (ellipseValue <= 1) {
+        return {
+            x: x,
+            y: y
+        };
+    }
+
+    const correctionScale =
+        1 / Math.sqrt(ellipseValue);
+
+    return {
+        x:
+            centreX +
+            relativeX * correctionScale,
+
+        y:
+            centreY +
+            relativeY * correctionScale
+    };
+}
+
+keepObjectInsideOval(gameObject) {
+    if (!gameObject || !this.field) {
+        return;
+    }
+
+    const {
+        centreX,
+        centreY,
+        horizontalRadius,
+        verticalRadius
+    } = this.field;
+
+    /*
+     * Keep the complete 22 × 30 player rectangle
+     * inside the painted field boundary.
+     */
+    const horizontalPadding = 14;
+    const verticalPadding = 18;
+
+    const allowedHorizontalRadius =
+        horizontalRadius - horizontalPadding;
+
+    const allowedVerticalRadius =
+        verticalRadius - verticalPadding;
+
+    const relativeX =
+        gameObject.x - centreX;
+
+    const relativeY =
+        gameObject.y - centreY;
+
+    const ellipseValue =
+        (relativeX * relativeX) /
+            (
+                allowedHorizontalRadius *
+                allowedHorizontalRadius
+            ) +
+        (relativeY * relativeY) /
+            (
+                allowedVerticalRadius *
+                allowedVerticalRadius
+            );
+
+    if (ellipseValue <= 1) {
+        return;
+    }
+
+    const correctionScale =
+        1 / Math.sqrt(ellipseValue);
+
+    gameObject.x =
+        centreX +
+        relativeX * correctionScale;
+
+    gameObject.y =
+        centreY +
+        relativeY * correctionScale;
 }
 
 updateAutomaticBounce(distanceMoved, delta) {
