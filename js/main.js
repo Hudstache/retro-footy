@@ -20,6 +20,7 @@ create() {
     this.createScoreboard();
     this.createPlayer();
     this.createTeammate();
+    this.createOpponent();
     this.createFootball();
     this.createKeyboardControls();
     this.createTouchControls();
@@ -69,6 +70,30 @@ createTeammate() {
         speed: 135,
         targetX: this.teammate.x,
         targetY: this.teammate.y,
+        hasBall: false
+    };
+}
+
+createOpponent() {
+    this.opponent = this.add.rectangle(
+        GAME_WIDTH / 2 + 55,
+        GAME_HEIGHT / 2 + 70,
+        22,
+        30,
+        0x2fa84f
+    );
+
+    this.opponent.setStrokeStyle(
+        3,
+        0xffffff
+    );
+
+    this.opponentData = {
+        team: "away",
+        state: "CHASE",
+        speed: 125,
+        targetX: this.opponent.x,
+        targetY: this.opponent.y,
         hasBall: false
     };
 }
