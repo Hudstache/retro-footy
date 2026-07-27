@@ -684,7 +684,7 @@ updateTeammateSupport(delta) {
      * movement in Step 12E.
      */
 const correctedTarget =
-    this.getPointInsideOval(
+    this.getPointInsideField(
         targetX,
         targetY
     );
@@ -711,7 +711,7 @@ this.teammateData.targetY = targetY;
     const stoppingDistance = 4;
 
 if (distanceToTarget <= stoppingDistance) {
-    this.keepObjectInsideOval(this.teammate);
+this.keepObjectInsideField(this.teammate);
     return;
 }
 
@@ -734,7 +734,7 @@ if (distanceToTarget <= stoppingDistance) {
     this.teammate.y +=
         directionToTarget.y * movementDistance;
 
-        this.keepObjectInsideOval(this.teammate);
+this.keepObjectInsideField(this.teammate);
 }
 
 updateOpponentChase(delta) {
@@ -748,7 +748,7 @@ updateOpponentChase(delta) {
      */
 if (!this.playerHasBall) {
     this.opponentData.state = "WAIT";
-    this.keepObjectInsideOval(this.opponent);
+this.keepObjectInsideField(this.opponent);
     return;
 }
 
@@ -780,7 +780,7 @@ if (!this.playerHasBall) {
     const pressureDistance = 28;
 
 if (distanceToPlayer <= pressureDistance) {
-    this.keepObjectInsideOval(this.opponent);
+this.keepObjectInsideField(this.opponent);
     return;
 }
 
@@ -803,23 +803,28 @@ if (distanceToPlayer <= pressureDistance) {
     this.opponent.y +=
         directionToPlayer.y * movementDistance;
 
-        this.keepObjectInsideOval(this.opponent);
+this.keepObjectInsideField(this.opponent);
 }
 
-getPointInsideOval(x, y) {
+getPointInsideField(
+    x,
+    y,
+    horizontalPadding = 14,
+    verticalPadding = 18
+) {
+    if (!this.field) {
+        return {
+            x: x,
+            y: y
+        };
+    }
+
     const {
         centreX,
         centreY,
         horizontalRadius,
         verticalRadius
     } = this.field;
-
-    /*
-     * The teammate is 22 pixels wide and 30 pixels tall.
-     * These margins keep the whole rectangle inside the oval.
-     */
-    const horizontalPadding = 14;
-    const verticalPadding = 18;
 
     const allowedHorizontalRadius =
         horizontalRadius - horizontalPadding;
@@ -863,63 +868,25 @@ getPointInsideOval(x, y) {
     };
 }
 
-keepObjectInsideOval(gameObject) {
-    if (!gameObject || !this.field) {
+keepObjectInsideField(
+    gameObject,
+    horizontalPadding = 14,
+    verticalPadding = 18
+) {
+    if (!gameObject) {
         return;
     }
 
-    const {
-        centreX,
-        centreY,
-        horizontalRadius,
-        verticalRadius
-    } = this.field;
+    const correctedPosition =
+        this.getPointInsideField(
+            gameObject.x,
+            gameObject.y,
+            horizontalPadding,
+            verticalPadding
+        );
 
-    /*
-     * Keep the complete 22 × 30 player rectangle
-     * inside the painted field boundary.
-     */
-    const horizontalPadding = 14;
-    const verticalPadding = 18;
-
-    const allowedHorizontalRadius =
-        horizontalRadius - horizontalPadding;
-
-    const allowedVerticalRadius =
-        verticalRadius - verticalPadding;
-
-    const relativeX =
-        gameObject.x - centreX;
-
-    const relativeY =
-        gameObject.y - centreY;
-
-    const ellipseValue =
-        (relativeX * relativeX) /
-            (
-                allowedHorizontalRadius *
-                allowedHorizontalRadius
-            ) +
-        (relativeY * relativeY) /
-            (
-                allowedVerticalRadius *
-                allowedVerticalRadius
-            );
-
-    if (ellipseValue <= 1) {
-        return;
-    }
-
-    const correctionScale =
-        1 / Math.sqrt(ellipseValue);
-
-    gameObject.x =
-        centreX +
-        relativeX * correctionScale;
-
-    gameObject.y =
-        centreY +
-        relativeY * correctionScale;
+    gameObject.x = correctedPosition.x;
+    gameObject.y = correctedPosition.y;
 }
 
 updateAutomaticBounce(distanceMoved, delta) {
