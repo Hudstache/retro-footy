@@ -19,6 +19,7 @@ create() {
     this.createGround();
     this.createScoreboard();
     this.createPlayer();
+    this.createTeammate();
     this.createFootball();
     this.createKeyboardControls();
     this.createTouchControls();
@@ -46,6 +47,30 @@ createPlayer() {
     this.moveRight = false;
     this.moveUp = false;
     this.moveDown = false;
+}
+
+createTeammate() {
+    this.teammate = this.add.rectangle(
+        GAME_WIDTH / 2 + 120,
+        GAME_HEIGHT / 2 - 55,
+        22,
+        30,
+        0x2185d0
+    );
+
+    this.teammate.setStrokeStyle(
+        3,
+        0xffffff
+    );
+
+    this.teammateData = {
+        team: "home",
+        state: "SUPPORT",
+        speed: 135,
+        targetX: this.teammate.x,
+        targetY: this.teammate.y,
+        hasBall: false
+    };
 }
 
 createFootball() {
