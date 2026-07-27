@@ -614,9 +614,101 @@ this.updateAutomaticBounce(
 );
 
 this.keepPlayerInsideField();
+this.updateTeammateSupport(delta);
 this.updateFootballFlight(delta);
 this.updateFootballPossession();
 this.keepFootballInsideField();
+}
+
+updateTeammateSupport(delta) {
+    if (!this.teammate || !this.player) {
+        return;
+    }
+
+    /*
+     * The teammate tries to remain ahead of the player,
+     * giving the player a forward passing option.
+     */
+    const forwardDistance = 115;
+
+    /*
+     * The teammate moves to the opposite side of the
+     * ground from the player's current position.
+     */
+    const supportWidth = 65;
+    const groundCentreY = GAME_HEIGHT / 2;
+
+    let verticalOffset;
+
+    if (this.player.y >= groundCentreY) {
+        verticalOffset = -supportWidth;
+    } else {
+        verticalOffset = supportWidth;
+    }
+
+    let targetX =
+        this.player.x + forwardDistance;
+
+    let targetY =
+        this.player.y + verticalOffset;
+
+    /*
+     * Temporarily keep the target inside the visible
+     * game area. We will add proper oval boundary
+     * movement in Step 12E.
+     */
+    targetX = Phaser.Math.Clamp(
+        targetX,
+        40,
+        GAME_WIDTH - 40
+    );
+
+    targetY = Phaser.Math.Clamp(
+        targetY,
+        95,
+        GAME_HEIGHT - 40
+    );
+
+    this.teammateData.targetX = targetX;
+    this.teammateData.targetY = targetY;
+
+    const directionToTarget =
+        new Phaser.Math.Vector2(
+            targetX - this.teammate.x,
+            targetY - this.teammate.y
+        );
+
+    const distanceToTarget =
+        directionToTarget.length();
+
+    /*
+     * Stop moving when the teammate is close enough
+     * to the target. This prevents shaking or jittering.
+     */
+    const stoppingDistance = 4;
+
+    if (distanceToTarget <= stoppingDistance) {
+        return;
+    }
+
+    directionToTarget.normalize();
+
+    const deltaSeconds = delta / 1000;
+
+    const maximumMovement =
+        this.teammateData.speed * deltaSeconds;
+
+    const movementDistance =
+        Math.min(
+            maximumMovement,
+            distanceToTarget
+        );
+
+    this.teammate.x +=
+        directionToTarget.x * movementDistance;
+
+    this.teammate.y +=
+        directionToTarget.y * movementDistance;
 }
 
 updateAutomaticBounce(distanceMoved, delta) {
