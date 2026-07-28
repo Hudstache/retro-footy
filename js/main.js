@@ -302,145 +302,326 @@ createKeyboardControls() {
 
 
 createPassControls() {
-    this.input.on("pointerdown", (pointer) => {
-        this.beginPassAim(pointer);
-    });
+    this.input.on(
+        "pointerdown",
+        (pointer) => {
+            /*
+             * Do not start pass aiming when the player
+             * presses the movement joystick.
+             */
+            if (this.isPointerInsideJoystick(pointer)) {
+                return;
+            }
 
-    this.input.on("pointermove", (pointer) => {
-        this.updatePassAim(pointer);
-    });
+            /*
+             * Also ignore the pointer currently controlling
+             * the joystick.
+             */
+            if (
+                this.joystickPointerId !== null &&
+                pointer.id === this.joystickPointerId
+            ) {
+                return;
+            }
 
-    this.input.on("pointerup", (pointer) => {
-        this.releasePassAim(pointer);
-    });
+            this.beginPassAim(pointer);
+        }
+    );
+
+    this.input.on(
+        "pointermove",
+        (pointer) => {
+            if (
+                this.joystickPointerId !== null &&
+                pointer.id === this.joystickPointerId
+            ) {
+                return;
+            }
+
+            this.updatePassAim(pointer);
+        }
+    );
+
+    this.input.on(
+        "pointerup",
+        (pointer) => {
+            if (
+                this.joystickPointerId !== null &&
+                pointer.id === this.joystickPointerId
+            ) {
+                return;
+            }
+
+            this.releasePassAim(pointer);
+        }
+    );
 }
 
 createTouchControls() {
-    const buttonStyle = {
-        fontFamily: "Courier New",
-        fontSize: "24px",
-        color: "#ffffff",
-        backgroundColor: "#222222",
-        padding: {
-            x: 15,
-            y: 9
+    /*
+     * Joystick dimensions and screen position.
+     */
+    const joystickRadius = 58;
+    const thumbRadius = 27;
+    const screenPadding = 28;
+
+    this.joystickCentreX =
+        GAME_WIDTH -
+        joystickRadius -
+        screenPadding;
+
+    this.joystickCentreY =
+        GAME_HEIGHT -
+        joystickRadius -
+        screenPadding;
+
+    this.joystickRadius = joystickRadius;
+    this.joystickPointerId = null;
+
+    /*
+     * Semi-transparent outer joystick base.
+     */
+    this.joystickBase = this.add.circle(
+        this.joystickCentreX,
+        this.joystickCentreY,
+        joystickRadius,
+        0x111111,
+        0.42
+    )
+        .setStrokeStyle(
+            3,
+            0xffffff,
+            0.45
+        )
+        .setScrollFactor(0)
+        .setDepth(1001)
+        .setInteractive(
+            new Phaser.Geom.Circle(
+                joystickRadius,
+                joystickRadius,
+                joystickRadius
+            ),
+            Phaser.Geom.Circle.Contains
+        );
+
+    /*
+     * Semi-transparent movable joystick thumb.
+     */
+    this.joystickThumb = this.add.circle(
+        this.joystickCentreX,
+        this.joystickCentreY,
+        thumbRadius,
+        0xffffff,
+        0.58
+    )
+        .setStrokeStyle(
+            2,
+            0x111111,
+            0.55
+        )
+        .setScrollFactor(0)
+        .setDepth(1002);
+
+    /*
+     * Begin joystick movement.
+     */
+    this.joystickBase.on(
+        "pointerdown",
+        (pointer) => {
+            if (this.joystickPointerId !== null) {
+                return;
+            }
+
+            this.joystickPointerId = pointer.id;
+
+            this.updateJoystickFromPointer(pointer);
         }
-    };
+    );
 
     /*
-     * These coordinates are screen coordinates because
-     * the controls will ignore camera scrolling.
+     * Continue tracking the joystick pointer even if
+     * the finger leaves the outer circle.
      */
-    const controlCentreX = 95;
-    const controlCentreY = 315;
+    this.input.on(
+        "pointermove",
+        (pointer) => {
+            if (
+                this.joystickPointerId === null ||
+                pointer.id !== this.joystickPointerId
+            ) {
+                return;
+            }
 
-    const upButton = this.add.text(
-        controlCentreX,
-        controlCentreY - 40,
-        "▲",
-        buttonStyle
-    )
-        .setOrigin(0.5)
-        .setInteractive()
-        .setScrollFactor(0)
-        .setDepth(1001);
-
-    const downButton = this.add.text(
-        controlCentreX,
-        controlCentreY + 40,
-        "▼",
-        buttonStyle
-    )
-        .setOrigin(0.5)
-        .setInteractive()
-        .setScrollFactor(0)
-        .setDepth(1001);
-
-    const leftButton = this.add.text(
-        controlCentreX - 48,
-        controlCentreY,
-        "◀",
-        buttonStyle
-    )
-        .setOrigin(0.5)
-        .setInteractive()
-        .setScrollFactor(0)
-        .setDepth(1001);
-
-    const rightButton = this.add.text(
-        controlCentreX + 48,
-        controlCentreY,
-        "▶",
-        buttonStyle
-    )
-        .setOrigin(0.5)
-        .setInteractive()
-        .setScrollFactor(0)
-        .setDepth(1001);
-
-    this.configureMovementButton(
-        upButton,
-        "moveUp"
-    );
-
-    this.configureMovementButton(
-        downButton,
-        "moveDown"
-    );
-
-    this.configureMovementButton(
-        leftButton,
-        "moveLeft"
-    );
-
-    this.configureMovementButton(
-        rightButton,
-        "moveRight"
+            this.updateJoystickFromPointer(pointer);
+        }
     );
 
     /*
-     * Store the buttons in case we need to resize,
-     * hide or reposition the interface later.
+     * Reset the joystick when the controlling finger
+     * is released.
      */
-    this.touchMovementButtons = [
-        upButton,
-        downButton,
-        leftButton,
-        rightButton
-    ];
+    this.input.on(
+        "pointerup",
+        (pointer) => {
+            if (
+                this.joystickPointerId === null ||
+                pointer.id !== this.joystickPointerId
+            ) {
+                return;
+            }
 
-    /*
- * Ensure movement never remains stuck if the pointer
- * is released away from the original button.
- */
-this.input.on("pointerup", () => {
-    this.resetTouchMovement();
-});
+            this.resetJoystick();
+        }
+    );
 }
 
-configureMovementButton(button, movementProperty) {
-    button.on("pointerdown", (pointer) => {
-        /*
-         * Stop this touch from also beginning a disposal aim.
-         */
-        pointer.event.stopPropagation();
+updateJoystickFromPointer(pointer) {
+    if (
+        !this.joystickThumb ||
+        this.joystickPointerId === null
+    ) {
+        return;
+    }
 
-        this[movementProperty] = true;
-    });
+    /*
+     * pointer.x and pointer.y are screen coordinates.
+     *
+     * This is correct because the joystick is fixed
+     * to the screen rather than the game world.
+     */
+    const differenceX =
+        pointer.x -
+        this.joystickCentreX;
 
-    button.on("pointerup", (pointer) => {
-        pointer.event.stopPropagation();
+    const differenceY =
+        pointer.y -
+        this.joystickCentreY;
 
-        this[movementProperty] = false;
-    });
+    const distanceFromCentre =
+        Math.sqrt(
+            differenceX * differenceX +
+            differenceY * differenceY
+        );
 
-    button.on("pointerout", () => {
-        this[movementProperty] = false;
-    });
+    /*
+     * Prevent the thumb from travelling outside the
+     * outer joystick base.
+     */
+    const clampedDistance =
+        Math.min(
+            distanceFromCentre,
+            this.joystickRadius
+        );
 
-    button.on("pointerupoutside", () => {
-        this[movementProperty] = false;
-    });
+    let directionX = 0;
+    let directionY = 0;
+
+    if (distanceFromCentre > 0) {
+        directionX =
+            differenceX /
+            distanceFromCentre;
+
+        directionY =
+            differenceY /
+            distanceFromCentre;
+    }
+
+    this.joystickThumb.x =
+        this.joystickCentreX +
+        directionX *
+        clampedDistance;
+
+    this.joystickThumb.y =
+        this.joystickCentreY +
+        directionY *
+        clampedDistance;
+
+    /*
+     * Ignore tiny movements near the centre.
+     *
+     * This prevents accidental movement when the player
+     * first places their finger on the joystick.
+     */
+    const deadzone = 12;
+
+    if (distanceFromCentre < deadzone) {
+        this.resetTouchMovement();
+        return;
+    }
+
+    /*
+     * Translate the joystick direction into the existing
+     * movement variables.
+     *
+     * A threshold below 0.35 allows diagonal movement
+     * without making it too easy to trigger accidentally.
+     */
+    const directionThreshold = 0.35;
+
+    this.moveLeft =
+        directionX < -directionThreshold;
+
+    this.moveRight =
+        directionX > directionThreshold;
+
+    this.moveUp =
+        directionY < -directionThreshold;
+
+    this.moveDown =
+        directionY > directionThreshold;
+}
+
+resetJoystick() {
+    this.joystickPointerId = null;
+
+    this.resetTouchMovement();
+
+    if (!this.joystickThumb) {
+        return;
+    }
+
+    /*
+     * Return the thumb to the centre.
+     */
+    this.joystickThumb.x =
+        this.joystickCentreX;
+
+    this.joystickThumb.y =
+        this.joystickCentreY;
+}
+
+isPointerInsideJoystick(pointer) {
+    if (
+        this.joystickCentreX === undefined ||
+        this.joystickCentreY === undefined ||
+        this.joystickRadius === undefined
+    ) {
+        return false;
+    }
+
+    const differenceX =
+        pointer.x -
+        this.joystickCentreX;
+
+    const differenceY =
+        pointer.y -
+        this.joystickCentreY;
+
+    const distanceSquared =
+        differenceX * differenceX +
+        differenceY * differenceY;
+
+    /*
+     * Include a small amount of extra space around the
+     * visible joystick to make touch input forgiving.
+     */
+    const touchRadius =
+        this.joystickRadius + 14;
+
+    return (
+        distanceSquared <=
+        touchRadius * touchRadius
+    );
 }
 
 resetTouchMovement() {
@@ -1962,6 +2143,10 @@ const gameConfig = {
 
     width: GAME_WIDTH,
     height: GAME_HEIGHT,
+
+    input: {
+    activePointers: 3
+},
 
     parent: "game-container",
 
