@@ -219,15 +219,38 @@ createCameraTarget() {
      * Lower values create slower, smoother movement.
      * Higher values make the camera respond faster.
      */
-    const horizontalFollowSpeed = 0.09;
-    const verticalFollowSpeed = 0.09;
+/*
+ * Camera tuning values.
+ */
+this.cameraSettings = {
+    horizontalFollowSpeed: 0.11,
+    verticalFollowSpeed: 0.11,
 
-    this.cameras.main.startFollow(
-        this.cameraTarget,
-        false,
-        horizontalFollowSpeed,
-        verticalFollowSpeed
-    );
+    deadzoneWidth: 80,
+    deadzoneHeight: 50,
+
+    zoom: 0.92,
+
+    playerLookAheadX: 55,
+    footballLookAheadX: 90,
+    footballLookAheadY: 25
+};
+
+/*
+ * Begin centred on the controlled player so the camera
+ * does not slowly travel across the world at startup.
+ */
+this.cameras.main.centerOn(
+    this.player.x,
+    this.player.y
+);
+
+this.cameras.main.startFollow(
+    this.cameraTarget,
+    false,
+    this.cameraSettings.horizontalFollowSpeed,
+    this.cameraSettings.verticalFollowSpeed
+);
 
     /*
  * Allow the action to move slightly before the camera
@@ -236,8 +259,8 @@ createCameraTarget() {
  * This reduces constant tiny camera movements.
  */
 this.cameras.main.setDeadzone(
-    90,
-    60
+    this.cameraSettings.deadzoneWidth,
+    this.cameraSettings.deadzoneHeight
 );
 
     /*
@@ -250,6 +273,14 @@ this.cameras.main.setDeadzone(
         WORLD_WIDTH,
         WORLD_HEIGHT
     );
+
+    /*
+ * Slightly zoom out so the player can see more of the
+ * field and nearby players.
+ */
+this.cameras.main.setZoom(
+    this.cameraSettings.zoom
+);
 
     /*
  * Keep pixel-art movement visually clean while
@@ -958,27 +989,113 @@ updateCameraTarget() {
     if (
         !this.cameraTarget ||
         !this.player ||
-        !this.football
+        !this.football ||
+        !this.cameraSettings
     ) {
         return;
     }
 
     /*
-     * While the player has possession, keep the
-     * controlled player in the centre of the camera.
+     * While the player has possession, frame the camera
+     * slightly ahead of the player.
+     *
+     * Retro Footy currently attacks toward the right.
      */
     if (this.playerHasBall) {
-        this.cameraTarget.x = this.player.x;
-        this.cameraTarget.y = this.player.y;
+        this.cameraTarget.x =
+            this.player.x +
+            this.cameraSettings.playerLookAheadX;
+
+        this.cameraTarget.y =
+            this.player.y;
+
+        this.keepCameraTargetInsideWorld();
         return;
     }
 
     /*
-     * When the football is travelling or loose,
-     * follow the football instead.
+     * While the football is travelling, use its velocity
+     * to look ahead in the direction of the disposal.
+     */
+    if (this.footballInFlight) {
+        const footballDirection =
+            new Phaser.Math.Vector2(
+                this.footballVelocityX,
+                this.footballVelocityY
+            );
+
+        if (footballDirection.length() > 0) {
+            footballDirection.normalize();
+        }
+
+        this.cameraTarget.x =
+            this.football.x +
+            footballDirection.x *
+            this.cameraSettings.footballLookAheadX;
+
+        this.cameraTarget.y =
+            this.football.y +
+            footballDirection.y *
+            this.cameraSettings.footballLookAheadY;
+
+        this.keepCameraTargetInsideWorld();
+        return;
+    }
+
+    /*
+     * When the football is loose and stationary, centre
+     * the action on the ball itself.
      */
     this.cameraTarget.x = this.football.x;
     this.cameraTarget.y = this.football.y;
+
+    this.keepCameraTargetInsideWorld();
+}
+
+keepCameraTargetInsideWorld() {
+    if (!this.cameraTarget) {
+        return;
+    }
+
+    /*
+     * Account for the camera viewport and current zoom.
+     *
+     * This prevents the camera target from pulling the
+     * camera beyond the edges of the world.
+     */
+    const camera = this.cameras.main;
+
+    const visibleHalfWidth =
+        camera.width /
+        camera.zoom /
+        2;
+
+    const visibleHalfHeight =
+        camera.height /
+        camera.zoom /
+        2;
+
+    const minimumX = visibleHalfWidth;
+    const maximumX =
+        WORLD_WIDTH - visibleHalfWidth;
+
+    const minimumY = visibleHalfHeight;
+    const maximumY =
+        WORLD_HEIGHT - visibleHalfHeight;
+
+    this.cameraTarget.x =
+        Phaser.Math.Clamp(
+            this.cameraTarget.x,
+            minimumX,
+            maximumX
+        );
+
+    this.cameraTarget.y =
+        Phaser.Math.Clamp(
+            this.cameraTarget.y,
+            minimumY,
+            maximumY
+        );
 }
 
 getPointInsideField(
