@@ -38,15 +38,6 @@ create() {
         WORLD_HEIGHT
     );
 
-    /*
-     * Begin with the camera centred over the middle
-     * of the football ground.
-     */
-    this.cameras.main.centerOn(
-        WORLD_WIDTH / 2,
-        WORLD_HEIGHT / 2
-    );
-
 this.createGround();
 
 /*
@@ -59,6 +50,12 @@ this.createPlayer();
 this.createTeammate();
 this.createOpponent();
 this.createFootball();
+
+/*
+ * Create the invisible object that the camera follows.
+ */
+this.createCameraTarget();
+
 this.createKeyboardControls();
 this.createPassControls();
 
@@ -210,6 +207,42 @@ this.passTypeText = this.add.text(
     this.aimGraphics = this.add.graphics();
 }
 
+createCameraTarget() {
+    /*
+     * This invisible point represents the current centre
+     * of the action.
+     */
+    this.cameraTarget = this.add.zone(
+        this.player.x,
+        this.player.y,
+        1,
+        1
+    );
+
+    /*
+     * Follow the target directly.
+     *
+     * Smooth easing will be added in Step 13E.
+     */
+    this.cameras.main.startFollow(
+        this.cameraTarget,
+        false,
+        1,
+        1
+    );
+
+    /*
+     * Prevent the camera from showing space outside
+     * the larger game world.
+     */
+    this.cameras.main.setBounds(
+        0,
+        0,
+        WORLD_WIDTH,
+        WORLD_HEIGHT
+    );
+}
+
 createKeyboardControls() {
     this.cursors = this.input.keyboard.createCursorKeys();
 
@@ -220,6 +253,7 @@ createKeyboardControls() {
         right: Phaser.Input.Keyboard.KeyCodes.D
     });
 }
+
 
 createPassControls() {
     this.input.on("pointerdown", (pointer) => {
@@ -692,6 +726,12 @@ this.updateOpponentChase(delta);
 this.updateFootballFlight(delta);
 this.updateFootballPossession();
 this.keepFootballInsideField();
+
+/*
+ * Update the camera after all player and football
+ * movement has been completed for this frame.
+ */
+this.updateCameraTarget();
 }
 
 updateTeammateSupport(delta) {
@@ -852,6 +892,33 @@ this.keepObjectInsideField(this.opponent);
         directionToPlayer.y * movementDistance;
 
 this.keepObjectInsideField(this.opponent);
+}
+
+updateCameraTarget() {
+    if (
+        !this.cameraTarget ||
+        !this.player ||
+        !this.football
+    ) {
+        return;
+    }
+
+    /*
+     * While the player has possession, keep the
+     * controlled player in the centre of the camera.
+     */
+    if (this.playerHasBall) {
+        this.cameraTarget.x = this.player.x;
+        this.cameraTarget.y = this.player.y;
+        return;
+    }
+
+    /*
+     * When the football is travelling or loose,
+     * follow the football instead.
+     */
+    this.cameraTarget.x = this.football.x;
+    this.cameraTarget.y = this.football.y;
 }
 
 getPointInsideField(
