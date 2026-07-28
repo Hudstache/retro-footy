@@ -5,8 +5,20 @@
  * Step 7B: Expanded AFL field presentation
  */
 
+/*
+ * The game window is the portion of the world currently
+ * visible to the player.
+ */
 const GAME_WIDTH = 700;
 const GAME_HEIGHT = 390;
+
+/*
+ * The world is larger than the visible game window.
+ *
+ * The camera will eventually move around this larger area.
+ */
+const WORLD_WIDTH = 1400;
+const WORLD_HEIGHT = 780;
 
 class MatchScene extends Phaser.Scene {
     constructor() {
@@ -16,22 +28,49 @@ class MatchScene extends Phaser.Scene {
 create() {
     this.cameras.main.setBackgroundColor("#171717");
 
-    this.createGround();
-    this.createScoreboard();
-    this.createPlayer();
-    this.createTeammate();
-    this.createOpponent();
-    this.createFootball();
-    this.createKeyboardControls();
-    this.createTouchControls();
+    /*
+     * Allow the camera to move around the larger world.
+     */
+    this.cameras.main.setBounds(
+        0,
+        0,
+        WORLD_WIDTH,
+        WORLD_HEIGHT
+    );
+
+    /*
+     * Begin with the camera centred over the middle
+     * of the football ground.
+     */
+    this.cameras.main.centerOn(
+        WORLD_WIDTH / 2,
+        WORLD_HEIGHT / 2
+    );
+
+this.createGround();
+
+/*
+ * The scoreboard and touch controls will be restored
+ * as fixed camera UI during Steps 13C and 13D.
+ */
+// this.createScoreboard();
+
+this.createPlayer();
+this.createTeammate();
+this.createOpponent();
+this.createFootball();
+this.createKeyboardControls();
+this.createPassControls();
+
+// this.createTouchControls();
 
     console.log("Retro Footy football possession loaded.");
 }
 
 createPlayer() {
     this.player = this.add.rectangle(
-        GAME_WIDTH / 2,
-        GAME_HEIGHT / 2 + 25,
+        this.field.centreX,
+        this.field.centreY + 25,
         22,
         30,
         0xff3b30
@@ -51,9 +90,9 @@ createPlayer() {
 }
 
 createTeammate() {
-    this.teammate = this.add.rectangle(
-        GAME_WIDTH / 2 + 120,
-        GAME_HEIGHT / 2 - 55,
+this.teammate = this.add.rectangle(
+    this.field.centreX + 120,
+    this.field.centreY - 55,
         22,
         30,
         0x2185d0
@@ -75,9 +114,9 @@ createTeammate() {
 }
 
 createOpponent() {
-    this.opponent = this.add.rectangle(
-        GAME_WIDTH / 2 + 55,
-        GAME_HEIGHT / 2 + 70,
+this.opponent = this.add.rectangle(
+    this.field.centreX + 55,
+    this.field.centreY + 70,
         22,
         30,
         0x2fa84f
@@ -99,9 +138,9 @@ createOpponent() {
 }
 
 createFootball() {
-    this.football = this.add.ellipse(
-        GAME_WIDTH / 2 + 75,
-        GAME_HEIGHT / 2 + 25,
+this.football = this.add.ellipse(
+    this.field.centreX + 75,
+    this.field.centreY + 25,
         15,
         9,
         0x9a5a2b
@@ -148,9 +187,12 @@ createFootball() {
     this.ballBounceDuration = 300;
 
     // Pass label
-    this.passTypeText = this.add.text(
-        GAME_WIDTH - 24,
-        64,
+this.passTypeText = this.add.text(
+    this.cameras.main.scrollX +
+        GAME_WIDTH -
+        24,
+
+    this.cameras.main.scrollY + 64,
         "",
         {
             fontFamily: "Courier New",
@@ -176,6 +218,20 @@ createKeyboardControls() {
         down: Phaser.Input.Keyboard.KeyCodes.S,
         left: Phaser.Input.Keyboard.KeyCodes.A,
         right: Phaser.Input.Keyboard.KeyCodes.D
+    });
+}
+
+createPassControls() {
+    this.input.on("pointerdown", (pointer) => {
+        this.beginPassAim(pointer);
+    });
+
+    this.input.on("pointermove", (pointer) => {
+        this.updatePassAim(pointer);
+    });
+
+    this.input.on("pointerup", (pointer) => {
+        this.releasePassAim(pointer);
     });
 }
 
@@ -242,18 +298,10 @@ createTouchControls() {
         "moveRight"
     );
 
-this.input.on("pointerdown", (pointer) => {
-    this.beginPassAim(pointer);
-});
-
-this.input.on("pointermove", (pointer) => {
-    this.updatePassAim(pointer);
-});
-
-this.input.on("pointerup", (pointer) => {
-    this.releasePassAim(pointer);
-    this.resetTouchMovement();
-});
+/*
+ * Pass controls are now created separately in
+ * createPassControls().
+ */
 }
 
 configureMovementButton(button, movementProperty) {
@@ -662,7 +710,7 @@ updateTeammateSupport(delta) {
      * ground from the player's current position.
      */
     const supportWidth = 65;
-    const groundCentreY = GAME_HEIGHT / 2;
+const groundCentreY = this.field.centreY;
 
     let verticalOffset;
 
@@ -1181,12 +1229,25 @@ createGround() {
     const fieldLengthMetres = 160;
     const fieldWidthMetres = 141;
 
-    const ovalHeight = 292;
-    const ovalWidth =
-        ovalHeight * (fieldLengthMetres / fieldWidthMetres);
+/*
+ * The larger field gives the camera room to move.
+ *
+ * This is approximately twice the size of the previous
+ * on-screen oval.
+ */
+const ovalHeight = 584;
 
-    const centreX = GAME_WIDTH / 2;
-    const centreY = 218;
+const ovalWidth =
+    ovalHeight *
+    (fieldLengthMetres / fieldWidthMetres);
+
+const centreX = WORLD_WIDTH / 2;
+
+/*
+ * Position the oval slightly lower than the exact world
+ * centre, matching the earlier field presentation.
+ */
+const centreY = WORLD_HEIGHT / 2 + 23;
 
     const horizontalRadius = ovalWidth / 2;
     const verticalRadius = ovalHeight / 2;
@@ -1227,7 +1288,7 @@ createGround() {
     );
 
     // Centre square
-    const centreSquareSize = 82;
+    const centreSquareSize = 164;
 
     graphics.lineStyle(3, 0xffffff, 1);
 
@@ -1239,21 +1300,21 @@ createGround() {
     );
 
     // Centre circle
-    graphics.strokeCircle(
-        centreX,
-        centreY,
-        22
-    );
+graphics.strokeCircle(
+    centreX,
+    centreY,
+    44
+);
 
     // Centre point
     graphics.fillStyle(0xffffff, 1);
 
-    graphics.fillRect(
-        centreX - 3,
-        centreY - 3,
-        6,
-        6
-    );
+graphics.fillRect(
+    centreX - 5,
+    centreY - 5,
+    10,
+    10
+);
 
     this.createGoalposts(graphics);
     this.createGoalSquares(graphics);
@@ -1279,7 +1340,7 @@ createGoalSquares(graphics) {
     const goalSquareWidth =
         goalPostOffset * 2;
 
-    const goalSquareDepth = 34;
+const goalSquareDepth = 60;
 
     graphics.lineStyle(3, 0xffffff, 1);
 
@@ -1425,7 +1486,7 @@ createFiftyMetreArcs(graphics) {
     /*
      * Move the goal line slightly inside the boundary.
      */
-    const goalLineInset = 8;
+    const goalLineInset = 16;
 
     const leftGoalLineX =
         centreX - horizontalRadius + goalLineInset;
@@ -1437,8 +1498,8 @@ createFiftyMetreArcs(graphics) {
      * The two inner posts are the goalposts.
      * The two outer posts are the behind posts.
      */
-    const behindPostOffset = 48;
-    const goalPostOffset = 20;
+const behindPostOffset = 72;
+const goalPostOffset = 32;
 
     const postOffsets = [
         -behindPostOffset,
@@ -1450,8 +1511,8 @@ createFiftyMetreArcs(graphics) {
     postOffsets.forEach((offset, index) => {
         const isGoalPost = index === 1 || index === 2;
 
-        const postDepth = isGoalPost ? 22 : 16;
-        const postThickness = 5;
+const postDepth = isGoalPost ? 28 : 20;
+const postThickness = 6;
 
         /*
          * Left-side posts extend outwards from the field.
