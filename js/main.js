@@ -40,11 +40,7 @@ create() {
 
 this.createGround();
 
-/*
- * The scoreboard and touch controls will be restored
- * as fixed camera UI during Steps 13C and 13D.
- */
-// this.createScoreboard();
+this.createScoreboard();
 
 this.createPlayer();
 this.createTeammate();
@@ -185,12 +181,9 @@ this.football = this.add.ellipse(
 
     // Pass label
 this.passTypeText = this.add.text(
-    this.cameras.main.scrollX +
-        GAME_WIDTH -
-        24,
-
-    this.cameras.main.scrollY + 64,
-        "",
+    GAME_WIDTH - 24,
+    64,
+    "",
         {
             fontFamily: "Courier New",
             fontSize: "15px",
@@ -201,8 +194,10 @@ this.passTypeText = this.add.text(
                 y: 5
             }
         }
-    ).setOrigin(1, 0);
-
+)
+    .setOrigin(1, 0)
+    .setScrollFactor(0)
+    .setDepth(1001);
     // Aiming line
     this.aimGraphics = this.add.graphics();
 }
@@ -1665,100 +1660,119 @@ const postThickness = 6;
     ).setOrigin(0.5);
 }
 
-    createScoreboard() {
-        const scoreboardY = 25;
+createScoreboard() {
+    const scoreboardY = 25;
 
-        // Main TV-style scoreboard panel
-        this.add.rectangle(
-            GAME_WIDTH / 2,
-            scoreboardY,
-            650,
-            42,
-            0x111111
-        ).setStrokeStyle(2, 0xffffff);
+    /*
+     * Store every scoreboard object so we can lock
+     * all of them to the camera.
+     */
+    this.scoreboardObjects = [];
 
-        // Home team panel
-        this.add.rectangle(
-            117,
-            scoreboardY,
-            185,
-            34,
-            0x9d1f1f
-        );
+    const mainPanel = this.add.rectangle(
+        GAME_WIDTH / 2,
+        scoreboardY,
+        650,
+        42,
+        0x111111
+    ).setStrokeStyle(2, 0xffffff);
 
-        // Quarter and timer panel
-        this.add.rectangle(
-            GAME_WIDTH / 2,
-            scoreboardY,
-            170,
-            34,
-            0x262626
-        );
+    const homePanel = this.add.rectangle(
+        117,
+        scoreboardY,
+        185,
+        34,
+        0x9d1f1f
+    );
 
-        // Away team panel
-        this.add.rectangle(
-            GAME_WIDTH - 117,
-            scoreboardY,
-            185,
-            34,
-            0x184f9e
-        );
+    const centrePanel = this.add.rectangle(
+        GAME_WIDTH / 2,
+        scoreboardY,
+        170,
+        34,
+        0x262626
+    );
 
-        this.add.text(
-            36,
-            13,
-            "HOME",
-            {
-                fontFamily: "Courier New",
-                fontSize: "15px",
-                color: "#ffffff"
-            }
-        );
+    const awayPanel = this.add.rectangle(
+        GAME_WIDTH - 117,
+        scoreboardY,
+        185,
+        34,
+        0x184f9e
+    );
 
-        this.add.text(
-            198,
-            13,
-            "0.0.0",
-            {
-                fontFamily: "Courier New",
-                fontSize: "15px",
-                color: "#ffffff"
-            }
-        ).setOrigin(1, 0);
+    const homeNameText = this.add.text(
+        36,
+        13,
+        "HOME",
+        {
+            fontFamily: "Courier New",
+            fontSize: "15px",
+            color: "#ffffff"
+        }
+    );
 
-        this.add.text(
-            GAME_WIDTH / 2,
-            13,
-            "Q1   1:30",
-            {
-                fontFamily: "Courier New",
-                fontSize: "16px",
-                color: "#ffffff"
-            }
-        ).setOrigin(0.5, 0);
+    const homeScoreText = this.add.text(
+        198,
+        13,
+        "0.0.0",
+        {
+            fontFamily: "Courier New",
+            fontSize: "15px",
+            color: "#ffffff"
+        }
+    ).setOrigin(1, 0);
 
-        this.add.text(
-            GAME_WIDTH - 198,
-            13,
-            "0.0.0",
-            {
-                fontFamily: "Courier New",
-                fontSize: "15px",
-                color: "#ffffff"
-            }
-        );
+    const quarterText = this.add.text(
+        GAME_WIDTH / 2,
+        13,
+        "Q1   1:30",
+        {
+            fontFamily: "Courier New",
+            fontSize: "16px",
+            color: "#ffffff"
+        }
+    ).setOrigin(0.5, 0);
 
-        this.add.text(
-            GAME_WIDTH - 36,
-            13,
-            "AWAY",
-            {
-                fontFamily: "Courier New",
-                fontSize: "15px",
-                color: "#ffffff"
-            }
-        ).setOrigin(1, 0);
-    }
+    const awayScoreText = this.add.text(
+        GAME_WIDTH - 198,
+        13,
+        "0.0.0",
+        {
+            fontFamily: "Courier New",
+            fontSize: "15px",
+            color: "#ffffff"
+        }
+    );
+
+    const awayNameText = this.add.text(
+        GAME_WIDTH - 36,
+        13,
+        "AWAY",
+        {
+            fontFamily: "Courier New",
+            fontSize: "15px",
+            color: "#ffffff"
+        }
+    ).setOrigin(1, 0);
+
+    this.scoreboardObjects.push(
+        mainPanel,
+        homePanel,
+        centrePanel,
+        awayPanel,
+        homeNameText,
+        homeScoreText,
+        quarterText,
+        awayScoreText,
+        awayNameText
+    );
+
+    this.scoreboardObjects.forEach((scoreboardObject) => {
+        scoreboardObject.setScrollFactor(0);
+        scoreboardObject.setDepth(1000);
+    });
+}
 }
 
 const gameConfig = {
