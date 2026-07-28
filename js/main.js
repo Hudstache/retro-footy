@@ -214,16 +214,31 @@ createCameraTarget() {
     );
 
     /*
-     * Follow the target directly.
+     * Follow the target smoothly.
      *
-     * Smooth easing will be added in Step 13E.
+     * Lower values create slower, smoother movement.
+     * Higher values make the camera respond faster.
      */
+    const horizontalFollowSpeed = 0.09;
+    const verticalFollowSpeed = 0.09;
+
     this.cameras.main.startFollow(
         this.cameraTarget,
         false,
-        1,
-        1
+        horizontalFollowSpeed,
+        verticalFollowSpeed
     );
+
+    /*
+ * Allow the action to move slightly before the camera
+ * begins adjusting.
+ *
+ * This reduces constant tiny camera movements.
+ */
+this.cameras.main.setDeadzone(
+    90,
+    60
+);
 
     /*
      * Prevent the camera from showing space outside
@@ -235,6 +250,12 @@ createCameraTarget() {
         WORLD_WIDTH,
         WORLD_HEIGHT
     );
+
+    /*
+ * Keep pixel-art movement visually clean while
+ * the camera scrolls.
+ */
+this.cameras.main.roundPixels = true;
 }
 
 createKeyboardControls() {
