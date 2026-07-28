@@ -54,8 +54,7 @@ this.createCameraTarget();
 
 this.createKeyboardControls();
 this.createPassControls();
-
-// this.createTouchControls();
+this.createTouchControls();
 
     console.log("Retro Footy football possession loaded.");
 }
@@ -276,6 +275,10 @@ createTouchControls() {
         }
     };
 
+    /*
+     * These coordinates are screen coordinates because
+     * the controls will ignore camera scrolling.
+     */
     const controlCentreX = 95;
     const controlCentreY = 315;
 
@@ -284,28 +287,44 @@ createTouchControls() {
         controlCentreY - 40,
         "▲",
         buttonStyle
-    ).setOrigin(0.5).setInteractive();
+    )
+        .setOrigin(0.5)
+        .setInteractive()
+        .setScrollFactor(0)
+        .setDepth(1001);
 
     const downButton = this.add.text(
         controlCentreX,
         controlCentreY + 40,
         "▼",
         buttonStyle
-    ).setOrigin(0.5).setInteractive();
+    )
+        .setOrigin(0.5)
+        .setInteractive()
+        .setScrollFactor(0)
+        .setDepth(1001);
 
     const leftButton = this.add.text(
         controlCentreX - 48,
         controlCentreY,
         "◀",
         buttonStyle
-    ).setOrigin(0.5).setInteractive();
+    )
+        .setOrigin(0.5)
+        .setInteractive()
+        .setScrollFactor(0)
+        .setDepth(1001);
 
     const rightButton = this.add.text(
         controlCentreX + 48,
         controlCentreY,
         "▶",
         buttonStyle
-    ).setOrigin(0.5).setInteractive();
+    )
+        .setOrigin(0.5)
+        .setInteractive()
+        .setScrollFactor(0)
+        .setDepth(1001);
 
     this.configureMovementButton(
         upButton,
@@ -327,22 +346,47 @@ createTouchControls() {
         "moveRight"
     );
 
-/*
- * Pass controls are now created separately in
- * createPassControls().
+    /*
+     * Store the buttons in case we need to resize,
+     * hide or reposition the interface later.
+     */
+    this.touchMovementButtons = [
+        upButton,
+        downButton,
+        leftButton,
+        rightButton
+    ];
+
+    /*
+ * Ensure movement never remains stuck if the pointer
+ * is released away from the original button.
  */
+this.input.on("pointerup", () => {
+    this.resetTouchMovement();
+});
 }
 
 configureMovementButton(button, movementProperty) {
-    button.on("pointerdown", () => {
+    button.on("pointerdown", (pointer) => {
+        /*
+         * Stop this touch from also beginning a disposal aim.
+         */
+        pointer.event.stopPropagation();
+
         this[movementProperty] = true;
     });
 
-    button.on("pointerup", () => {
+    button.on("pointerup", (pointer) => {
+        pointer.event.stopPropagation();
+
         this[movementProperty] = false;
     });
 
     button.on("pointerout", () => {
+        this[movementProperty] = false;
+    });
+
+    button.on("pointerupoutside", () => {
         this[movementProperty] = false;
     });
 }
