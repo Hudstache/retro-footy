@@ -45,7 +45,19 @@ this.createScoreboard();
 this.createPlayer();
 this.createTeammate();
 this.createOpponent();
+
+/*
+ * The controlled and supporting roles can move between
+ * the two home-team players.
+ *
+ * The rectangles themselves keep their colours and
+ * identities.
+ */
+this.controlledPlayer = this.player;
+this.supportPlayer = this.teammate;
+
 this.createFootball();
+this.createControlledPlayerIndicator();
 
 /*
  * Create the invisible object that the camera follows.
@@ -195,6 +207,97 @@ this.teammate = this.add.rectangle(
         targetY: this.teammate.y,
         hasBall: false
     };
+}
+
+createControlledPlayerIndicator() {
+    /*
+     * The yellow triangle appears above whichever home
+     * player is currently controlled.
+     */
+    this.controlledPlayerIndicator =
+        this.add.triangle(
+            this.controlledPlayer.x,
+            this.controlledPlayer.y - 27,
+            0,
+            0,
+            12,
+            0,
+            6,
+            9,
+            0xffff00
+        );
+
+    this.controlledPlayerIndicator
+        .setStrokeStyle(
+            2,
+            0x111111
+        )
+        .setDepth(20);
+}
+
+updateControlledPlayerIndicator() {
+    if (
+        !this.controlledPlayerIndicator ||
+        !this.controlledPlayer
+    ) {
+        return;
+    }
+
+    this.controlledPlayerIndicator.x =
+        this.controlledPlayer.x;
+
+    this.controlledPlayerIndicator.y =
+        this.controlledPlayer.y - 27;
+}
+
+switchControlledPlayer(newControlledPlayer) {
+    if (!newControlledPlayer) {
+        return;
+    }
+
+    /*
+     * Do nothing when this player is already controlled.
+     */
+    if (
+        newControlledPlayer ===
+        this.controlledPlayer
+    ) {
+        return;
+    }
+
+    const previousControlledPlayer =
+        this.controlledPlayer;
+
+    /*
+     * The player receiving possession becomes controlled.
+     *
+     * The previously controlled player becomes the new
+     * supporting AI player.
+     */
+    this.controlledPlayer =
+        newControlledPlayer;
+
+    this.supportPlayer =
+        previousControlledPlayer;
+
+    /*
+     * Cancel any movement or disposal input that may
+     * still belong to the previous player.
+     */
+    this.resetTouchMovement();
+    this.cancelPassAim();
+
+    this.distanceRunWithBall = 0;
+    this.isBallBouncing = false;
+    this.ballBounceTimer = 0;
+
+    this.updateControlledPlayerIndicator();
+
+    console.log(
+        this.controlledPlayer === this.player
+            ? "Control switched to the red player."
+            : "Control switched to the blue player."
+    );
 }
 
 createOpponent() {
@@ -405,13 +508,12 @@ createCameraTarget() {
      * This invisible point represents the current centre
      * of the action.
      */
-    this.cameraTarget = this.add.zone(
-        this.player.x,
-        this.player.y,
-        1,
-        1
-    );
-
+this.cameraTarget = this.add.zone(
+    this.controlledPlayer.x,
+    this.controlledPlayer.y,
+    1,
+    1
+);
     /*
      * Follow the target smoothly.
      *
@@ -440,8 +542,8 @@ this.cameraSettings = {
  * does not slowly travel across the world at startup.
  */
 this.cameras.main.centerOn(
-    this.player.x,
-    this.player.y
+    this.controlledPlayer.x,
+    this.controlledPlayer.y
 );
 
 this.cameras.main.startFollow(
@@ -857,13 +959,13 @@ beginPassAim(pointer) {
     const pointerX = pointer.worldX;
     const pointerY = pointer.worldY;
 
-    const distanceFromPlayer =
-        Phaser.Math.Distance.Between(
-            pointerX,
-            pointerY,
-            this.player.x,
-            this.player.y
-        );
+const distanceFromPlayer =
+    Phaser.Math.Distance.Between(
+        pointerX,
+        pointerY,
+        this.controlledPlayer.x,
+        this.controlledPlayer.y
+    );
 
     /*
      * The touch must start close to the player.
@@ -948,16 +1050,17 @@ drawPassAim() {
             horizontalDrag / this.maximumPassDrag
         );
 
-    const previewEndX =
-        this.player.x + previewLength;
+const previewEndX =
+    this.controlledPlayer.x +
+    previewLength;
 
-    const previewEndY =
-        this.player.y +
-        Phaser.Math.Clamp(
-            aimedVerticalOffset,
-            -100,
-            100
-        );
+const previewEndY =
+    this.controlledPlayer.y +
+    Phaser.Math.Clamp(
+        aimedVerticalOffset,
+        -100,
+        100
+    );
 
     const isKick =
         horizontalDrag >= this.handballKickThreshold;
@@ -973,10 +1076,10 @@ drawPassAim() {
 
     this.aimGraphics.beginPath();
 
-    this.aimGraphics.moveTo(
-        this.player.x,
-        this.player.y
-    );
+this.aimGraphics.moveTo(
+    this.controlledPlayer.x,
+    this.controlledPlayer.y
+);
 
     this.aimGraphics.lineTo(
         previewEndX,
@@ -1144,11 +1247,11 @@ this.footballCanBeMarked = false;
      * Place the football slightly in front of the
      * controlled player before launching it.
      */
-    this.football.x =
-        this.player.x + 18;
+this.football.x =
+    this.controlledPlayer.x + 18;
 
-    this.football.y =
-        this.player.y;
+this.football.y =
+    this.controlledPlayer.y;
 
     this.footballVelocityX =
         direction.x * launchSpeed;
@@ -1206,9 +1309,9 @@ this.footballRotationSpeed =
 }
 
 update(time, delta) {
-    if (!this.player) {
-        return;
-    }
+if (!this.controlledPlayer) {
+    return;
+}
 
     let horizontalDirection = 0;
     let verticalDirection = 0;
@@ -1264,21 +1367,24 @@ if (this.playerIsMoving) {
     const moveDistance =
         this.playerSpeed * (delta / 1000);
 
-const previousPlayerX = this.player.x;
-const previousPlayerY = this.player.y;
+const previousPlayerX =
+    this.controlledPlayer.x;
 
-this.player.x +=
+const previousPlayerY =
+    this.controlledPlayer.y;
+
+this.controlledPlayer.x +=
     direction.x * moveDistance;
 
-this.player.y +=
+this.controlledPlayer.y +=
     direction.y * moveDistance;
 
 const actualDistanceMoved =
     Phaser.Math.Distance.Between(
         previousPlayerX,
         previousPlayerY,
-        this.player.x,
-        this.player.y
+        this.controlledPlayer.x,
+        this.controlledPlayer.y
     );
 
 this.updateAutomaticBounce(
@@ -1300,83 +1406,96 @@ this.keepFootballInsideField();
  * movement has been completed for this frame.
  */
 this.updateCameraTarget();
+this.updateControlledPlayerIndicator();
 }
 
 updateTeammateSupport(delta) {
-    if (!this.teammate || !this.player) {
+    if (
+        !this.supportPlayer ||
+        !this.controlledPlayer
+    ) {
         return;
     }
 
     /*
-     * The teammate tries to remain ahead of the player,
-     * giving the player a forward passing option.
+     * The supporting player tries to remain ahead of
+     * the currently controlled player.
      */
     const forwardDistance = 115;
-
-    /*
-     * The teammate moves to the opposite side of the
-     * ground from the player's current position.
-     */
     const supportWidth = 65;
-const groundCentreY = this.field.centreY;
+
+    const groundCentreY =
+        this.field.centreY;
 
     let verticalOffset;
 
-    if (this.player.y >= groundCentreY) {
-        verticalOffset = -supportWidth;
+    if (
+        this.controlledPlayer.y >=
+        groundCentreY
+    ) {
+        verticalOffset =
+            -supportWidth;
     } else {
-        verticalOffset = supportWidth;
+        verticalOffset =
+            supportWidth;
     }
 
     let targetX =
-        this.player.x + forwardDistance;
+        this.controlledPlayer.x +
+        forwardDistance;
 
     let targetY =
-        this.player.y + verticalOffset;
+        this.controlledPlayer.y +
+        verticalOffset;
 
-    /*
-     * Temporarily keep the target inside the visible
-     * game area. We will add proper oval boundary
-     * movement in Step 12E.
-     */
-const correctedTarget =
-    this.getPointInsideField(
-        targetX,
-        targetY
-    );
+    const correctedTarget =
+        this.getPointInsideField(
+            targetX,
+            targetY
+        );
 
-targetX = correctedTarget.x;
-targetY = correctedTarget.y;
+    targetX = correctedTarget.x;
+    targetY = correctedTarget.y;
 
-this.teammateData.targetX = targetX;
-this.teammateData.targetY = targetY;
+    this.teammateData.targetX =
+        targetX;
+
+    this.teammateData.targetY =
+        targetY;
 
     const directionToTarget =
         new Phaser.Math.Vector2(
-            targetX - this.teammate.x,
-            targetY - this.teammate.y
+            targetX -
+                this.supportPlayer.x,
+
+            targetY -
+                this.supportPlayer.y
         );
 
     const distanceToTarget =
         directionToTarget.length();
 
-    /*
-     * Stop moving when the teammate is close enough
-     * to the target. This prevents shaking or jittering.
-     */
     const stoppingDistance = 4;
 
-if (distanceToTarget <= stoppingDistance) {
-this.keepObjectInsideField(this.teammate);
-    return;
-}
+    if (
+        distanceToTarget <=
+        stoppingDistance
+    ) {
+        this.keepObjectInsideField(
+            this.supportPlayer
+        );
+
+        return;
+    }
 
     directionToTarget.normalize();
 
-    const deltaSeconds = delta / 1000;
+    const deltaSeconds =
+        delta / 1000;
 
     const maximumMovement =
-        this.teammateData.speed * deltaSeconds;
+        this.teammateData.speed *
+        deltaSeconds;
 
     const movementDistance =
         Math.min(
@@ -1384,19 +1503,26 @@ this.keepObjectInsideField(this.teammate);
             distanceToTarget
         );
 
-    this.teammate.x +=
-        directionToTarget.x * movementDistance;
+    this.supportPlayer.x +=
+        directionToTarget.x *
+        movementDistance;
 
-    this.teammate.y +=
-        directionToTarget.y * movementDistance;
+    this.supportPlayer.y +=
+        directionToTarget.y *
+        movementDistance;
 
-this.keepObjectInsideField(this.teammate);
+    this.keepObjectInsideField(
+        this.supportPlayer
+    );
 }
 
 updateOpponentChase(delta) {
-    if (!this.opponent || !this.player) {
-        return;
-    }
+if (
+    !this.opponent ||
+    !this.controlledPlayer
+) {
+    return;
+}
 
     /*
      * For now, the opponent only chases when the
@@ -1414,8 +1540,11 @@ this.keepObjectInsideField(this.opponent);
      * The opponent targets the controlled player's
      * current position.
      */
-    const targetX = this.player.x;
-    const targetY = this.player.y;
+const targetX =
+    this.controlledPlayer.x;
+
+const targetY =
+    this.controlledPlayer.y;
 
     this.opponentData.targetX = targetX;
     this.opponentData.targetY = targetY;
@@ -1465,7 +1594,7 @@ this.keepObjectInsideField(this.opponent);
 updateCameraTarget() {
     if (
         !this.cameraTarget ||
-        !this.player ||
+!this.controlledPlayer ||
         !this.football ||
         !this.cameraSettings
     ) {
@@ -1478,13 +1607,13 @@ updateCameraTarget() {
      *
      * Retro Footy currently attacks toward the right.
      */
-    if (this.playerHasBall) {
-        this.cameraTarget.x =
-            this.player.x +
-            this.cameraSettings.playerLookAheadX;
+if (this.playerHasBall) {
+    this.cameraTarget.x =
+        this.controlledPlayer.x +
+        this.cameraSettings.playerLookAheadX;
 
-        this.cameraTarget.y =
-            this.player.y;
+    this.cameraTarget.y =
+        this.controlledPlayer.y;
 
         this.keepCameraTargetInsideWorld();
         return;
@@ -1727,9 +1856,9 @@ updateBallBounceAnimation(delta) {
     const bounceCurve =
         Math.sin(progress * Math.PI);
 
-    this.football.x = this.player.x + 10;
+    this.football.x = this.controlledPlayer.x + 10;
     this.football.y =
-        this.player.y +
+        this.controlledPlayer.y +
         2 +
         bounceCurve * 20;
 
@@ -1737,8 +1866,8 @@ updateBallBounceAnimation(delta) {
         this.isBallBouncing = false;
         this.ballBounceTimer = 0;
 
-        this.football.x = this.player.x + 10;
-        this.football.y = this.player.y + 2;
+        this.football.x = this.controlledPlayer.x + 10;
+        this.football.y = this.controlledPlayer.y + 2;
     }
 }
 
@@ -1747,62 +1876,51 @@ updateFootballPossession(delta) {
         return;
     }
 
-    /*
-     * Count down the brief pickup lock after a disposal.
-     */
     if (this.footballPickupLockTimer > 0) {
         this.footballPickupLockTimer =
             Math.max(
                 0,
-                this.footballPickupLockTimer - delta
+                this.footballPickupLockTimer -
+                    delta
             );
     }
 
     /*
-     * The player cannot collect a football that is still
-     * travelling through the air.
+     * Airborne possession is handled by the marking
+     * system rather than ground-ball pickup.
      */
     if (this.footballInFlight) {
         return;
     }
 
     /*
-     * Keep the football attached to the controlled
-     * player while they have possession.
+     * Attach the football to whichever home player is
+     * currently controlled and has possession.
      */
     if (this.playerHasBall) {
         if (!this.isBallBouncing) {
             this.football.x =
-                this.player.x + 10;
+                this.controlledPlayer.x + 10;
 
             this.football.y =
-                this.player.y + 2;
+                this.controlledPlayer.y + 2;
         }
 
         return;
     }
 
-    /*
-     * Do not allow an immediate recollection after the
-     * player disposes of the football.
-     */
     if (this.footballPickupLockTimer > 0) {
         return;
     }
 
-    /*
-     * A bouncing football can only be collected when it
-     * is visually close to the ground.
-     */
     if (!this.footballIsAvailableForPickup()) {
         return;
     }
 
     /*
-     * Running players receive a small pickup-radius
-     * bonus, representing a clean running pickup.
+     * Check the controlled player first.
      */
-    const currentPickupDistance =
+    const controlledPickupDistance =
         this.ballPickupDistance +
         (
             this.playerIsMoving
@@ -1810,19 +1928,47 @@ updateFootballPossession(delta) {
                 : 0
         );
 
-    const distanceToBall =
+    const controlledDistanceToBall =
         Phaser.Math.Distance.Between(
-            this.player.x,
-            this.player.y,
+            this.controlledPlayer.x,
+            this.controlledPlayer.y,
             this.football.x,
             this.football.y
         );
 
     if (
-        distanceToBall <=
-        currentPickupDistance
+        controlledDistanceToBall <=
+        controlledPickupDistance
     ) {
-        this.completeLooseBallPickup();
+        this.completeLooseBallPickup(
+            this.controlledPlayer
+        );
+
+        return;
+    }
+
+    /*
+     * The supporting home player can also collect a
+     * loose football.
+     *
+     * When this occurs, control immediately switches to
+     * that player.
+     */
+    const supportDistanceToBall =
+        Phaser.Math.Distance.Between(
+            this.supportPlayer.x,
+            this.supportPlayer.y,
+            this.football.x,
+            this.football.y
+        );
+
+    if (
+        supportDistanceToBall <=
+        this.ballPickupDistance
+    ) {
+        this.completeLooseBallPickup(
+            this.supportPlayer
+        );
     }
 }
 
@@ -1868,23 +2014,43 @@ footballIsAvailableForPickup() {
     return false;
 }
 
-completeLooseBallPickup() {
-    /*
-     * Stop any remaining ground movement.
-     */
+completeLooseBallPickup(receivingPlayer) {
+    if (!receivingPlayer) {
+        return;
+    }
+
+    const controlWillSwitch =
+        receivingPlayer !==
+        this.controlledPlayer;
+
     this.stopFootballFlight();
 
     /*
-     * Place the football directly into the controlled
-     * player's possession.
+     * Transfer control before attaching the football.
      */
+    if (controlWillSwitch) {
+        this.switchControlledPlayer(
+            receivingPlayer
+        );
+    }
+
     this.football.x =
-        this.player.x + 10;
+        this.controlledPlayer.x + 10;
 
     this.football.y =
-        this.player.y + 2;
+        this.controlledPlayer.y + 2;
 
-    this.takeFootballPossession();
+    this.takeFootballPossession(
+        this.controlledPlayer
+    );
+
+    if (controlWillSwitch) {
+        console.log(
+            "Supporting player collected the football. Control switched."
+        );
+
+        return;
+    }
 
     console.log(
         this.playerIsMoving
@@ -2071,32 +2237,18 @@ if (currentSpeed <= stoppingSpeed) {
 }
 
 updateFootballMarking() {
-    /*
-     * Marks can only occur while the football is still
-     * travelling through the air.
-     */
     if (!this.footballInFlight) {
         return;
     }
 
-    /*
-     * A handball cannot be marked.
-     */
     if (this.footballFlightType !== "KICK") {
         return;
     }
 
-    /*
-     * The kick must travel approximately 15 metres.
-     */
     if (!this.footballCanBeMarked) {
         return;
     }
 
-    /*
-     * Prevent the player from marking the football
-     * immediately after kicking it.
-     */
     if (
         this.footballFlightTime <
         this.minimumMarkFlightTime
@@ -2104,44 +2256,84 @@ updateFootballMarking() {
         return;
     }
 
-    const distanceToPlayer =
+    /*
+     * Check whether the currently controlled player has
+     * reached the kick.
+     */
+    const controlledDistanceToBall =
         Phaser.Math.Distance.Between(
-            this.player.x,
-            this.player.y,
+            this.controlledPlayer.x,
+            this.controlledPlayer.y,
             this.football.x,
             this.football.y
         );
 
     if (
-        distanceToPlayer >
+        controlledDistanceToBall <=
         this.playerMarkDistance
     ) {
+        this.completeHomePlayerMark(
+            this.controlledPlayer
+        );
+
         return;
     }
 
-    this.completePlayerMark();
+    /*
+     * The supporting player can also mark the football.
+     *
+     * Successful possession automatically transfers
+     * control to that player.
+     */
+    const supportDistanceToBall =
+        Phaser.Math.Distance.Between(
+            this.supportPlayer.x,
+            this.supportPlayer.y,
+            this.football.x,
+            this.football.y
+        );
+
+    if (
+        supportDistanceToBall <=
+        this.playerMarkDistance
+    ) {
+        this.completeHomePlayerMark(
+            this.supportPlayer
+        );
+    }
 }
 
-completePlayerMark() {
-    /*
-     * Stop all flight and ground movement before
-     * awarding possession.
-     */
+completeHomePlayerMark(receivingPlayer) {
+    if (!receivingPlayer) {
+        return;
+    }
+
+    const controlWillSwitch =
+        receivingPlayer !==
+        this.controlledPlayer;
+
     this.stopFootballFlight();
 
-    /*
-     * Position the football in the player's hands.
-     */
+    if (controlWillSwitch) {
+        this.switchControlledPlayer(
+            receivingPlayer
+        );
+    }
+
     this.football.x =
-        this.player.x + 10;
+        this.controlledPlayer.x + 10;
 
     this.football.y =
-        this.player.y + 2;
+        this.controlledPlayer.y + 2;
 
-    this.takeFootballPossession();
+    this.takeFootballPossession(
+        this.controlledPlayer
+    );
 
     console.log(
-        "Player marked the football."
+        controlWillSwitch
+            ? "Supporting player marked the football. Control switched."
+            : "Controlled player marked the football."
     );
 }
 
@@ -2485,10 +2677,22 @@ this.footballFlightType = null;
     );
 }
 
-takeFootballPossession() {
+takeFootballPossession(receivingPlayer = this.controlledPlayer) {
+        if (!receivingPlayer) {
+        return;
+    }
+
+    if (
+        receivingPlayer !==
+        this.controlledPlayer
+    ) {
+        this.switchControlledPlayer(
+            receivingPlayer
+        );
+    }
     this.playerHasBall = true;
     this.footballPickupLockTimer = 0;
-    
+
     this.footballInFlight = false;
 this.footballGroundState = "NONE";
 
@@ -2526,8 +2730,11 @@ dropFootball() {
 
     this.playerHasBall = false;
 
-    this.football.x = this.player.x + 24;
-    this.football.y = this.player.y;
+this.football.x =
+    this.controlledPlayer.x + 24;
+
+this.football.y =
+    this.controlledPlayer.y;
 
     this.football.setStrokeStyle(
         2,
@@ -2536,47 +2743,15 @@ dropFootball() {
 }
 
 keepPlayerInsideField() {
-    const {
-        centreX,
-        centreY,
-        horizontalRadius,
-        verticalRadius
-    } = this.field;
-
-    const playerRadius = 12;
-
-    const relativeX =
-        this.player.x - centreX;
-
-    const relativeY =
-        this.player.y - centreY;
-
-    const allowedHorizontalRadius =
-        horizontalRadius - playerRadius;
-
-    const allowedVerticalRadius =
-        verticalRadius - playerRadius;
-
-    const ellipseValue =
-        (relativeX * relativeX) /
-        (allowedHorizontalRadius * allowedHorizontalRadius) +
-        (relativeY * relativeY) /
-        (allowedVerticalRadius * allowedVerticalRadius);
-
-    if (ellipseValue <= 1) {
+    if (!this.controlledPlayer) {
         return;
     }
 
-    const correctionScale =
-        1 / Math.sqrt(ellipseValue);
-
-    this.player.x =
-        centreX +
-        relativeX * correctionScale;
-
-    this.player.y =
-        centreY +
-        relativeY * correctionScale;
+    this.keepObjectInsideField(
+        this.controlledPlayer,
+        12,
+        12
+    );
 }
 
 keepFootballInsideField() {
