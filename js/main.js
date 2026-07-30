@@ -262,6 +262,35 @@ this.footballRotationSpeed = 0;
 this.footballFlightTime = 0;
 
 /*
+ * Ground-ball movement states:
+ *
+ * NONE     = stationary or being carried
+ * BOUNCING = completing one or more ground bounces
+ * ROLLING  = travelling along the ground
+ */
+this.footballGroundState = "NONE";
+
+/*
+ * Track the current bounce animation.
+ */
+this.footballBounceCount = 0;
+this.footballMaximumBounces = 3;
+
+this.footballGroundBounceTimer = 0;
+this.footballGroundBounceDuration = 260;
+
+/*
+ * Stores the football's scale when each bounce begins.
+ */
+this.footballBounceHeight = 0;
+
+/*
+ * Ground movement settings.
+ */
+this.footballRollingFriction = 2.8;
+this.footballMinimumRollingSpeed = 12;
+
+/*
  * Records the football's normal display size so the
  * flight animation can safely return it to normal.
  */
@@ -1190,6 +1219,7 @@ this.keepPlayerInsideField();
 this.updateTeammateSupport(delta);
 this.updateOpponentChase(delta);
 this.updateFootballFlight(delta);
+this.updateFootballGroundPhysics(delta);
 this.updateFootballPossession();
 this.keepFootballInsideField();
 
@@ -1806,13 +1836,322 @@ updateFootballFlight(delta) {
             ? 42
             : 32;
 
-    if (currentSpeed <= stoppingSpeed) {
+if (currentSpeed <= stoppingSpeed) {
+    this.startFootballGroundBounce();
+}
+}
+
+startFootballGroundBounce() {
+    if (!this.footballInFlight) {
+        return;
+    }
+
+    /*
+     * The football is no longer flying through the air,
+     * but it keeps moving as it contacts the ground.
+     */
+    this.footballInFlight = false;
+    this.footballGroundState = "BOUNCING";
+
+    this.footballBounceCount = 0;
+    this.footballGroundBounceTimer = 0;
+
+    /*
+     * Preserve the disposal direction.
+     */
+    const movementDirection =
+        new Phaser.Math.Vector2(
+            this.footballVelocityX,
+            this.footballVelocityY
+        );
+
+    if (movementDirection.length() > 0) {
+        movementDirection.normalize();
+    } else {
+        movementDirection.set(1, 0);
+    }
+
+    /*
+     * Give the first bounce enough momentum to remain
+     * clearly visible.
+     */
+    const firstBounceSpeed =
+        this.footballFlightType === "KICK"
+            ? 105
+            : 68;
+
+    this.footballVelocityX =
+        movementDirection.x *
+        firstBounceSpeed;
+
+    this.footballVelocityY =
+        movementDirection.y *
+        firstBounceSpeed;
+
+    /*
+     * Kicks produce a larger first bounce than
+     * handballs.
+     */
+    this.footballBounceHeight =
+        this.footballFlightType === "KICK"
+            ? 0.28
+            : 0.17;
+}
+
+updateFootballGroundPhysics(delta) {
+    if (this.footballGroundState === "NONE") {
+        return;
+    }
+
+    const deltaSeconds =
+        delta / 1000;
+
+    /*
+     * Continue moving the ball along the field while
+     * it bounces or rolls.
+     */
+    this.football.x +=
+        this.footballVelocityX *
+        deltaSeconds;
+
+    this.football.y +=
+        this.footballVelocityY *
+        deltaSeconds;
+
+    /*
+     * Keep the existing anticlockwise backspin.
+     */
+    this.football.angle +=
+        this.footballRotationSpeed *
+        deltaSeconds;
+
+    if (this.footballGroundState === "BOUNCING") {
+        this.updateFootballBounce(delta);
+        return;
+    }
+
+    if (this.footballGroundState === "ROLLING") {
+        this.updateFootballRolling(deltaSeconds);
+    }
+}
+
+updateFootballBounce(delta) {
+    this.footballGroundBounceTimer +=
+        delta;
+
+    const bounceProgress =
+        Phaser.Math.Clamp(
+            this.footballGroundBounceTimer /
+                this.footballGroundBounceDuration,
+            0,
+            1
+        );
+
+    /*
+     * The football grows and returns to normal size,
+     * visually representing it rising from and falling
+     * back toward the ground.
+     */
+    const bounceCurve =
+        Math.sin(
+            bounceProgress *
+            Math.PI
+        );
+
+    const bounceScale =
+        1 +
+        bounceCurve *
+        this.footballBounceHeight;
+
+    this.football.setScale(
+        this.footballBaseScaleX *
+            bounceScale,
+
+        this.footballBaseScaleY *
+            bounceScale
+    );
+
+    /*
+     * Gradually reduce speed throughout the bounce.
+     */
+    const deltaSeconds =
+        delta / 1000;
+
+    const bounceDragMultiplier =
+        Math.exp(
+            -1.15 *
+            deltaSeconds
+        );
+
+    this.footballVelocityX *=
+        bounceDragMultiplier;
+
+    this.footballVelocityY *=
+        bounceDragMultiplier;
+
+    this.footballRotationSpeed *=
+        Math.exp(
+            -0.9 *
+            deltaSeconds
+        );
+
+    if (bounceProgress < 1) {
+        return;
+    }
+
+    this.completeFootballBounce();
+}
+
+completeFootballBounce() {
+    this.footballBounceCount += 1;
+    this.footballGroundBounceTimer = 0;
+
+    this.football.setScale(
+        this.footballBaseScaleX,
+        this.footballBaseScaleY
+    );
+
+    const currentSpeed =
+        Math.sqrt(
+            this.footballVelocityX *
+                this.footballVelocityX +
+
+            this.footballVelocityY *
+                this.footballVelocityY
+        );
+
+    /*
+     * After several bounces, or once there is not enough
+     * speed for another clear bounce, begin rolling.
+     */
+    if (
+        this.footballBounceCount >=
+            this.footballMaximumBounces ||
+        currentSpeed < 35
+    ) {
+        this.startFootballRolling();
+        return;
+    }
+
+    /*
+     * An Australian football does not always bounce
+     * perfectly straight.
+     *
+     * Apply a small random direction change after each
+     * ground impact.
+     */
+    const maximumDirectionChange =
+        this.footballFlightType === "KICK"
+            ? 18
+            : 10;
+
+    const directionChangeDegrees =
+        Phaser.Math.Between(
+            -maximumDirectionChange,
+            maximumDirectionChange
+        );
+
+    const movementDirection =
+        new Phaser.Math.Vector2(
+            this.footballVelocityX,
+            this.footballVelocityY
+        );
+
+    movementDirection.rotate(
+        Phaser.Math.DegToRad(
+            directionChangeDegrees
+        )
+    );
+
+    /*
+     * Each bounce loses a portion of its speed.
+     */
+    const retainedSpeed =
+        currentSpeed *
+        0.64;
+
+    movementDirection.normalize();
+
+    this.footballVelocityX =
+        movementDirection.x *
+        retainedSpeed;
+
+    this.footballVelocityY =
+        movementDirection.y *
+        retainedSpeed;
+
+    /*
+     * Each bounce is visually smaller than the last.
+     */
+    this.footballBounceHeight *=
+        0.58;
+
+    this.footballGroundBounceDuration =
+        Math.max(
+            150,
+            this.footballGroundBounceDuration *
+                0.82
+        );
+}
+
+startFootballRolling() {
+    this.footballGroundState = "ROLLING";
+
+    this.footballGroundBounceTimer = 0;
+    this.footballBounceHeight = 0;
+
+    this.football.setScale(
+        this.footballBaseScaleX,
+        this.footballBaseScaleY
+    );
+
+    /*
+     * Reduce speed slightly when the final bounce
+     * transitions into rolling.
+     */
+    this.footballVelocityX *= 0.72;
+    this.footballVelocityY *= 0.72;
+}
+
+updateFootballRolling(deltaSeconds) {
+    /*
+     * Apply frame-rate-independent ground friction.
+     */
+    const frictionMultiplier =
+        Math.exp(
+            -this.footballRollingFriction *
+            deltaSeconds
+        );
+
+    this.footballVelocityX *=
+        frictionMultiplier;
+
+    this.footballVelocityY *=
+        frictionMultiplier;
+
+    this.footballRotationSpeed *=
+        frictionMultiplier;
+
+    const currentSpeed =
+        Math.sqrt(
+            this.footballVelocityX *
+                this.footballVelocityX +
+
+            this.footballVelocityY *
+                this.footballVelocityY
+        );
+
+    if (
+        currentSpeed <=
+        this.footballMinimumRollingSpeed
+    ) {
         this.stopFootballFlight();
     }
 }
 
 stopFootballFlight() {
     this.footballInFlight = false;
+    this.footballGroundState = "NONE";
 
     this.footballVelocityX = 0;
     this.footballVelocityY = 0;
@@ -1820,6 +2159,11 @@ stopFootballFlight() {
     this.footballRotationSpeed = 0;
     this.footballFlightTime = 0;
     this.footballFlightType = null;
+
+    this.footballBounceCount = 0;
+    this.footballGroundBounceTimer = 0;
+    this.footballGroundBounceDuration = 260;
+    this.footballBounceHeight = 0;
 
     /*
      * Return the football to its normal visual size.
@@ -1829,12 +2173,6 @@ stopFootballFlight() {
         this.footballBaseScaleY
     );
 
-    /*
-     * Keep the final rotated position for now.
-     *
-     * This looks more natural than snapping the ball
-     * back to a horizontal angle when it lands.
-     */
     this.football.setStrokeStyle(
         2,
         0xffffff
@@ -1843,6 +2181,25 @@ stopFootballFlight() {
 
 takeFootballPossession() {
     this.playerHasBall = true;
+    this.footballInFlight = false;
+this.footballGroundState = "NONE";
+
+this.footballVelocityX = 0;
+this.footballVelocityY = 0;
+
+this.footballRotationSpeed = 0;
+this.footballFlightTime = 0;
+this.footballFlightType = null;
+
+this.footballBounceCount = 0;
+this.footballGroundBounceTimer = 0;
+this.footballGroundBounceDuration = 260;
+this.footballBounceHeight = 0;
+
+this.football.setScale(
+    this.footballBaseScaleX,
+    this.footballBaseScaleY
+);
     this.distanceRunWithBall = 0;
     this.isBallBouncing = false;
 
@@ -1959,7 +2316,10 @@ keepFootballInsideField() {
         centreY +
         relativeY * correctionScale;
 
-        if (this.footballInFlight) {
+if (
+    this.footballInFlight ||
+    this.footballGroundState !== "NONE"
+) {
     this.stopFootballFlight();
 }
 }
