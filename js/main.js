@@ -56,7 +56,99 @@ this.createKeyboardControls();
 this.createPassControls();
 this.createTouchControls();
 
+/*
+ * Position the interface inside the fixed
+ * 700 × 390 logical game view.
+ */
+this.layoutResponsiveInterface();
+
+/*
+ * Reapply those positions whenever the browser
+ * or phone screen changes size.
+ */
+this.scale.on(
+    Phaser.Scale.Events.RESIZE,
+    this.handleGameResize,
+    this
+);
+
     console.log("Retro Footy football possession loaded.");
+}
+
+handleGameResize() {
+    /*
+     * Phaser FIT automatically scales the canvas.
+     *
+     * We only restore the fixed logical positions
+     * of the interface after a browser resize.
+     */
+    this.layoutResponsiveInterface();
+}
+
+layoutResponsiveInterface() {
+    /*
+     * Phaser FIT mode keeps the internal game view
+     * fixed at GAME_WIDTH × GAME_HEIGHT.
+     *
+     * Therefore all interface positions should use
+     * those fixed game coordinates.
+     */
+
+    /*
+     * Keep the scoreboard centred at the top.
+     */
+    if (this.scoreboardContainer) {
+        this.scoreboardContainer.setPosition(
+            GAME_WIDTH / 2,
+            25
+        );
+    }
+
+    /*
+     * Keep the pass label in the top-right corner.
+     */
+    if (this.passTypeText) {
+        this.passTypeText.setPosition(
+            GAME_WIDTH - 24,
+            64
+        );
+    }
+
+    /*
+     * Keep the joystick in the bottom-right corner.
+     */
+    if (
+        this.joystickBase &&
+        this.joystickThumb
+    ) {
+        const screenPadding = 28;
+
+        this.joystickCentreX =
+            GAME_WIDTH -
+            this.joystickRadius -
+            screenPadding;
+
+        this.joystickCentreY =
+            GAME_HEIGHT -
+            this.joystickRadius -
+            screenPadding;
+
+        this.joystickBase.setPosition(
+            this.joystickCentreX,
+            this.joystickCentreY
+        );
+
+        /*
+         * Only recenter the joystick thumb when the
+         * player is not touching the joystick.
+         */
+        if (this.joystickPointerId === null) {
+            this.joystickThumb.setPosition(
+                this.joystickCentreX,
+                this.joystickCentreY
+            );
+        }
+    }
 }
 
 createPlayer() {
@@ -180,7 +272,7 @@ this.football = this.add.ellipse(
 
     // Pass label
 this.passTypeText = this.add.text(
-    GAME_WIDTH - 24,
+    this.scale.gameSize.width - 24,
     64,
     "",
         {
@@ -365,15 +457,21 @@ createTouchControls() {
     const thumbRadius = 27;
     const screenPadding = 28;
 
-    this.joystickCentreX =
-        GAME_WIDTH -
-        joystickRadius -
-        screenPadding;
+const currentScreenWidth =
+    this.scale.gameSize.width;
 
-    this.joystickCentreY =
-        GAME_HEIGHT -
-        joystickRadius -
-        screenPadding;
+const currentScreenHeight =
+    this.scale.gameSize.height;
+
+this.joystickCentreX =
+    currentScreenWidth -
+    joystickRadius -
+    screenPadding;
+
+this.joystickCentreY =
+    currentScreenHeight -
+    joystickRadius -
+    screenPadding;
 
     this.joystickRadius = joystickRadius;
     this.joystickPointerId = null;
@@ -1238,12 +1336,6 @@ keepCameraTargetInsideWorld() {
         return;
     }
 
-    /*
-     * Account for the camera viewport and current zoom.
-     *
-     * This prevents the camera target from pulling the
-     * camera beyond the edges of the world.
-     */
     const camera = this.cameras.main;
 
     const visibleHalfWidth =
@@ -1256,13 +1348,33 @@ keepCameraTargetInsideWorld() {
         camera.zoom /
         2;
 
-    const minimumX = visibleHalfWidth;
-    const maximumX =
-        WORLD_WIDTH - visibleHalfWidth;
+    /*
+     * Safely calculate the limits even when the
+     * browser viewport is unusually large.
+     */
+    const minimumX =
+        Math.min(
+            visibleHalfWidth,
+            WORLD_WIDTH / 2
+        );
 
-    const minimumY = visibleHalfHeight;
+    const maximumX =
+        Math.max(
+            WORLD_WIDTH - visibleHalfWidth,
+            WORLD_WIDTH / 2
+        );
+
+    const minimumY =
+        Math.min(
+            visibleHalfHeight,
+            WORLD_HEIGHT / 2
+        );
+
     const maximumY =
-        WORLD_HEIGHT - visibleHalfHeight;
+        Math.max(
+            WORLD_HEIGHT - visibleHalfHeight,
+            WORLD_HEIGHT / 2
+        );
 
     this.cameraTarget.x =
         Phaser.Math.Clamp(
@@ -2024,49 +2136,53 @@ const postThickness = 6;
 }
 
 createScoreboard() {
-    const scoreboardY = 25;
-
     /*
-     * Store every scoreboard object so we can lock
-     * all of them to the camera.
+     * All scoreboard children use coordinates relative
+     * to the centre of this container.
      */
-    this.scoreboardObjects = [];
+    this.scoreboardContainer = this.add.container(
+        this.scale.gameSize.width / 2,
+        25
+    );
 
     const mainPanel = this.add.rectangle(
-        GAME_WIDTH / 2,
-        scoreboardY,
+        0,
+        0,
         650,
         42,
         0x111111
-    ).setStrokeStyle(2, 0xffffff);
+    ).setStrokeStyle(
+        2,
+        0xffffff
+    );
 
     const homePanel = this.add.rectangle(
-        117,
-        scoreboardY,
+        -233,
+        0,
         185,
         34,
         0x9d1f1f
     );
 
     const centrePanel = this.add.rectangle(
-        GAME_WIDTH / 2,
-        scoreboardY,
+        0,
+        0,
         170,
         34,
         0x262626
     );
 
     const awayPanel = this.add.rectangle(
-        GAME_WIDTH - 117,
-        scoreboardY,
+        233,
+        0,
         185,
         34,
         0x184f9e
     );
 
     const homeNameText = this.add.text(
-        36,
-        13,
+        -307,
+        -12,
         "HOME",
         {
             fontFamily: "Courier New",
@@ -2076,30 +2192,8 @@ createScoreboard() {
     );
 
     const homeScoreText = this.add.text(
-        198,
-        13,
-        "0.0.0",
-        {
-            fontFamily: "Courier New",
-            fontSize: "15px",
-            color: "#ffffff"
-        }
-    ).setOrigin(1, 0);
-
-    const quarterText = this.add.text(
-        GAME_WIDTH / 2,
-        13,
-        "Q1   1:30",
-        {
-            fontFamily: "Courier New",
-            fontSize: "16px",
-            color: "#ffffff"
-        }
-    ).setOrigin(0.5, 0);
-
-    const awayScoreText = this.add.text(
-        GAME_WIDTH - 198,
-        13,
+        -225,
+        -12,
         "0.0.0",
         {
             fontFamily: "Courier New",
@@ -2108,18 +2202,49 @@ createScoreboard() {
         }
     );
 
+    const quarterText = this.add.text(
+        0,
+        -12,
+        "Q1   1:30",
+        {
+            fontFamily: "Courier New",
+            fontSize: "16px",
+            color: "#ffffff"
+        }
+    ).setOrigin(
+        0.5,
+        0
+    );
+
+    const awayScoreText = this.add.text(
+        225,
+        -12,
+        "0.0.0",
+        {
+            fontFamily: "Courier New",
+            fontSize: "15px",
+            color: "#ffffff"
+        }
+    ).setOrigin(
+        1,
+        0
+    );
+
     const awayNameText = this.add.text(
-        GAME_WIDTH - 36,
-        13,
+        307,
+        -12,
         "AWAY",
         {
             fontFamily: "Courier New",
             fontSize: "15px",
             color: "#ffffff"
         }
-    ).setOrigin(1, 0);
+    ).setOrigin(
+        1,
+        0
+    );
 
-    this.scoreboardObjects.push(
+    this.scoreboardContainer.add([
         mainPanel,
         homePanel,
         centrePanel,
@@ -2129,40 +2254,61 @@ createScoreboard() {
         quarterText,
         awayScoreText,
         awayNameText
-    );
+    ]);
 
-    this.scoreboardObjects.forEach((scoreboardObject) => {
-        scoreboardObject.setScrollFactor(0);
-        scoreboardObject.setDepth(1000);
-    });
+    /*
+     * The complete scoreboard ignores camera movement.
+     */
+    this.scoreboardContainer
+        .setScrollFactor(0)
+        .setDepth(1000);
 }
 }
 
-const gameConfig = {
+const config = {
     type: Phaser.AUTO,
 
-    width: GAME_WIDTH,
-    height: GAME_HEIGHT,
-
-    input: {
-    activePointers: 3
-},
-
+    /*
+     * Phaser inserts the canvas into this element.
+     */
     parent: "game-container",
 
     backgroundColor: "#171717",
 
-    pixelArt: true,
-    roundPixels: true,
+    /*
+     * Fixed logical game dimensions.
+     *
+     * Phaser scales this complete view to fit the
+     * available PC or iPhone screen.
+     */
+    width: GAME_WIDTH,
+    height: GAME_HEIGHT,
 
     scale: {
         mode: Phaser.Scale.FIT,
-        autoCenter: Phaser.Scale.CENTER_BOTH,
+
+        autoCenter:
+            Phaser.Scale.CENTER_BOTH,
+
         width: GAME_WIDTH,
         height: GAME_HEIGHT
+    },
+
+    /*
+     * Allows joystick movement and pass dragging
+     * to be detected at the same time.
+     */
+    input: {
+        activePointers: 3
+    },
+
+    render: {
+        pixelArt: true,
+        antialias: false,
+        roundPixels: true
     },
 
     scene: MatchScene
 };
 
-window.game = new Phaser.Game(gameConfig);
+const game = new Phaser.Game(config);
