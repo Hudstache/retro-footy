@@ -236,10 +236,37 @@ this.football = this.add.ellipse(
     this.playerHasBall = false;
     this.ballPickupDistance = 24;
 
-    // Ball movement
-    this.footballInFlight = false;
-    this.footballVelocityX = 0;
-    this.footballVelocityY = 0;
+// Ball movement
+this.footballInFlight = false;
+
+this.footballVelocityX = 0;
+this.footballVelocityY = 0;
+
+/*
+ * Stores whether the current disposal is a kick
+ * or handball.
+ */
+this.footballFlightType = null;
+
+/*
+ * Rotation speed is measured in degrees per second.
+ */
+this.footballRotationSpeed = 0;
+
+/*
+ * Tracks how long the football has been travelling.
+ *
+ * This will also support bounce and marking systems
+ * in later steps.
+ */
+this.footballFlightTime = 0;
+
+/*
+ * Records the football's normal display size so the
+ * flight animation can safely return it to normal.
+ */
+this.footballBaseScaleX = 1;
+this.footballBaseScaleY = 1;
 
     // Drag aiming
     this.isAimingPass = false;
@@ -954,20 +981,41 @@ launchFootball(horizontalDrag, verticalDrag, isKick) {
         return;
     }
 
+    /*
+     * Transfer possession from the player to the
+     * travelling football.
+     */
     this.playerHasBall = false;
     this.footballInFlight = true;
 
-    /*
-     * Horizontal drag determines the percentage of maximum power.
-     */
-    const powerPercentage =
-        horizontalDrag / this.maximumPassDrag;
+    this.footballFlightType =
+        isKick ? "KICK" : "HANDBALL";
+
+    this.footballFlightTime = 0;
 
     /*
-     * Kicks travel faster and farther than handballs.
+     * Convert the horizontal drag into a value
+     * between 0 and 1.
      */
-    const minimumSpeed = isKick ? 250 : 170;
-    const maximumSpeed = isKick ? 480 : 280;
+    const powerPercentage =
+        Phaser.Math.Clamp(
+            horizontalDrag /
+                this.maximumPassDrag,
+            0,
+            1
+        );
+
+    /*
+     * Kicks travel faster and farther.
+     *
+     * Handballs leave the player more slowly and
+     * lose speed sooner.
+     */
+    const minimumSpeed =
+        isKick ? 270 : 165;
+
+    const maximumSpeed =
+        isKick ? 520 : 285;
 
     const launchSpeed =
         Phaser.Math.Linear(
@@ -977,23 +1025,37 @@ launchFootball(horizontalDrag, verticalDrag, isKick) {
         );
 
     /*
-     * This prototype always attacks toward the right.
+     * Retro Footy currently attacks toward the right.
      *
-     * Vertical drag is inverted.
+     * Vertical drag remains inverted:
+     *
+     * Drag down = football travels up.
+     * Drag up   = football travels down.
      */
-    const direction = new Phaser.Math.Vector2(
-        1,
+    const verticalDirection =
         Phaser.Math.Clamp(
             -verticalDrag / 100,
             -1,
             1
-        )
-    );
+        );
+
+    const direction =
+        new Phaser.Math.Vector2(
+            1,
+            verticalDirection
+        );
 
     direction.normalize();
 
-    this.football.x = this.player.x + 18;
-    this.football.y = this.player.y;
+    /*
+     * Place the football slightly in front of the
+     * controlled player before launching it.
+     */
+    this.football.x =
+        this.player.x + 18;
+
+    this.football.y =
+        this.player.y;
 
     this.footballVelocityX =
         direction.x * launchSpeed;
@@ -1002,11 +1064,45 @@ launchFootball(horizontalDrag, verticalDrag, isKick) {
         direction.y * launchSpeed;
 
     /*
-     * The football has a different outline while travelling.
+     * Kicks spin more quickly than handballs.
+     *
+     * Stronger disposals also spin slightly faster.
+     */
+    const minimumRotationSpeed =
+        isKick ? 540 : 300;
+
+    const maximumRotationSpeed =
+        isKick ? 900 : 540;
+
+/*
+ * Use a negative rotation speed so the football
+ * rotates anticlockwise, creating backward spin
+ * while travelling toward the right.
+ */
+this.footballRotationSpeed =
+    -Phaser.Math.Linear(
+        minimumRotationSpeed,
+        maximumRotationSpeed,
+        powerPercentage
+    );
+
+    /*
+     * Begin each flight from the football's normal
+     * visual size.
+     */
+    this.football.setScale(
+        this.footballBaseScaleX,
+        this.footballBaseScaleY
+    );
+
+    /*
+     * Use the outline to show the current disposal.
      */
     this.football.setStrokeStyle(
         2,
-        isKick ? 0xffd43b : 0x66d9ff
+        isKick
+            ? 0xffd43b
+            : 0x66d9ff
     );
 
     console.log(
@@ -1580,40 +1676,137 @@ updateFootballFlight(delta) {
         return;
     }
 
-    const deltaSeconds = delta / 1000;
+    const deltaSeconds =
+        delta / 1000;
 
-    this.football.x +=
-        this.footballVelocityX * deltaSeconds;
-
-    this.football.y +=
-        this.footballVelocityY * deltaSeconds;
+    this.footballFlightTime +=
+        deltaSeconds;
 
     /*
-     * Apply gradual air resistance.
+     * Move the football using its current velocity.
      */
-    const dragPerSecond = 1.8;
+    this.football.x +=
+        this.footballVelocityX *
+        deltaSeconds;
 
+    this.football.y +=
+        this.footballVelocityY *
+        deltaSeconds;
+
+    /*
+     * Rotate the football while it travels.
+     */
+    this.football.angle +=
+        this.footballRotationSpeed *
+        deltaSeconds;
+
+    /*
+     * Kicks hold their speed for longer.
+     *
+     * Handballs lose speed more quickly.
+     */
+    const dragPerSecond =
+        this.footballFlightType === "KICK"
+            ? 1.25
+            : 2.15;
+
+    /*
+     * Exponential drag behaves consistently even if
+     * the game's frame rate changes.
+     */
     const dragMultiplier =
-        Math.max(
-            0,
-            1 - dragPerSecond * deltaSeconds
+        Math.exp(
+            -dragPerSecond *
+            deltaSeconds
         );
 
-    this.footballVelocityX *= dragMultiplier;
-    this.footballVelocityY *= dragMultiplier;
+    this.footballVelocityX *=
+        dragMultiplier;
+
+    this.footballVelocityY *=
+        dragMultiplier;
+
+    /*
+     * Gradually reduce the spin as the football loses
+     * speed.
+     */
+    const rotationDragPerSecond =
+        this.footballFlightType === "KICK"
+            ? 0.8
+            : 1.35;
+
+    const rotationDragMultiplier =
+        Math.exp(
+            -rotationDragPerSecond *
+            deltaSeconds
+        );
+
+    this.footballRotationSpeed *=
+        rotationDragMultiplier;
+
+    /*
+     * Give the flight a subtle visual height effect.
+     *
+     * The ball grows slightly and then returns toward
+     * normal size as it slows.
+     *
+     * This is purely visual and does not change the
+     * football's actual field position.
+     */
+    const flightPulseSpeed =
+        this.footballFlightType === "KICK"
+            ? 5
+            : 7;
+
+    const maximumScaleIncrease =
+        this.footballFlightType === "KICK"
+            ? 0.18
+            : 0.10;
+
+    const flightPulse =
+        Math.max(
+            0,
+            Math.sin(
+                this.footballFlightTime *
+                flightPulseSpeed
+            )
+        );
+
+    const flightScale =
+        1 +
+        flightPulse *
+        maximumScaleIncrease;
+
+    this.football.setScale(
+        this.footballBaseScaleX *
+            flightScale,
+
+        this.footballBaseScaleY *
+            flightScale
+    );
 
     const currentSpeed =
         Math.sqrt(
             this.footballVelocityX *
-            this.footballVelocityX +
+                this.footballVelocityX +
+
             this.footballVelocityY *
-            this.footballVelocityY
+                this.footballVelocityY
         );
 
     /*
-     * Stop the football once it becomes slow enough.
+     * Step 14A currently ends the flight once the ball
+     * becomes slow.
+     *
+     * Step 14B will replace this stopping behaviour
+     * with bouncing and rolling.
      */
-    if (currentSpeed < 35) {
+    const stoppingSpeed =
+        this.footballFlightType === "KICK"
+            ? 42
+            : 32;
+
+    if (currentSpeed <= stoppingSpeed) {
         this.stopFootballFlight();
     }
 }
@@ -1624,6 +1817,24 @@ stopFootballFlight() {
     this.footballVelocityX = 0;
     this.footballVelocityY = 0;
 
+    this.footballRotationSpeed = 0;
+    this.footballFlightTime = 0;
+    this.footballFlightType = null;
+
+    /*
+     * Return the football to its normal visual size.
+     */
+    this.football.setScale(
+        this.footballBaseScaleX,
+        this.footballBaseScaleY
+    );
+
+    /*
+     * Keep the final rotated position for now.
+     *
+     * This looks more natural than snapping the ball
+     * back to a horizontal angle when it lands.
+     */
     this.football.setStrokeStyle(
         2,
         0xffffff
