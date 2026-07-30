@@ -297,6 +297,36 @@ this.footballMinimumRollingSpeed = 12;
 this.footballBaseScaleX = 1;
 this.footballBaseScaleY = 1;
 
+/*
+ * Marking system.
+ */
+this.playerMarkDistance = 30;
+
+/*
+ * Prevent the player from immediately marking the
+ * football as it leaves their boot.
+ */
+this.minimumMarkFlightTime = 0.22;
+
+/*
+ * Track how far the current disposal has travelled.
+ *
+ * Under AFL rules, a kick must travel at least
+ * approximately 15 metres to be awarded as a mark.
+ */
+this.footballFlightDistance = 0;
+
+this.minimumMarkDistance =
+    this.field.horizontalRadius *
+    2 *
+    (15 / this.field.fieldLengthMetres);
+
+/*
+ * Stores whether the current kick has travelled far
+ * enough to qualify for a mark.
+ */
+this.footballCanBeMarked = false;
+
     // Drag aiming
     this.isAimingPass = false;
     this.aimPointerId = null;
@@ -1023,6 +1053,12 @@ launchFootball(horizontalDrag, verticalDrag, isKick) {
     this.footballFlightTime = 0;
 
     /*
+ * Begin tracking the new disposal.
+ */
+this.footballFlightDistance = 0;
+this.footballCanBeMarked = false;
+
+    /*
      * Convert the horizontal drag into a value
      * between 0 and 1.
      */
@@ -1219,6 +1255,7 @@ this.keepPlayerInsideField();
 this.updateTeammateSupport(delta);
 this.updateOpponentChase(delta);
 this.updateFootballFlight(delta);
+this.updateFootballMarking();
 this.updateFootballGroundPhysics(delta);
 this.updateFootballPossession();
 this.keepFootballInsideField();
@@ -1712,6 +1749,16 @@ updateFootballFlight(delta) {
     this.footballFlightTime +=
         deltaSeconds;
 
+        /*
+ * Record the football's position before moving it so
+ * we can measure the distance travelled this frame.
+ */
+const previousFootballX =
+    this.football.x;
+
+const previousFootballY =
+    this.football.y;
+
     /*
      * Move the football using its current velocity.
      */
@@ -1722,6 +1769,33 @@ updateFootballFlight(delta) {
     this.football.y +=
         this.footballVelocityY *
         deltaSeconds;
+
+        /*
+ * Add this frame's movement to the total disposal
+ * distance.
+ */
+const distanceTravelledThisFrame =
+    Phaser.Math.Distance.Between(
+        previousFootballX,
+        previousFootballY,
+        this.football.x,
+        this.football.y
+    );
+
+this.footballFlightDistance +=
+    distanceTravelledThisFrame;
+
+/*
+ * Only kicks that have travelled the required distance
+ * can result in a mark.
+ *
+ * Handballs can still be collected later as loose-ball
+ * possessions, but they cannot be marked.
+ */
+this.footballCanBeMarked =
+    this.footballFlightType === "KICK" &&
+    this.footballFlightDistance >=
+        this.minimumMarkDistance;
 
     /*
      * Rotate the football while it travels.
@@ -1839,6 +1913,81 @@ updateFootballFlight(delta) {
 if (currentSpeed <= stoppingSpeed) {
     this.startFootballGroundBounce();
 }
+}
+
+updateFootballMarking() {
+    /*
+     * Marks can only occur while the football is still
+     * travelling through the air.
+     */
+    if (!this.footballInFlight) {
+        return;
+    }
+
+    /*
+     * A handball cannot be marked.
+     */
+    if (this.footballFlightType !== "KICK") {
+        return;
+    }
+
+    /*
+     * The kick must travel approximately 15 metres.
+     */
+    if (!this.footballCanBeMarked) {
+        return;
+    }
+
+    /*
+     * Prevent the player from marking the football
+     * immediately after kicking it.
+     */
+    if (
+        this.footballFlightTime <
+        this.minimumMarkFlightTime
+    ) {
+        return;
+    }
+
+    const distanceToPlayer =
+        Phaser.Math.Distance.Between(
+            this.player.x,
+            this.player.y,
+            this.football.x,
+            this.football.y
+        );
+
+    if (
+        distanceToPlayer >
+        this.playerMarkDistance
+    ) {
+        return;
+    }
+
+    this.completePlayerMark();
+}
+
+completePlayerMark() {
+    /*
+     * Stop all flight and ground movement before
+     * awarding possession.
+     */
+    this.stopFootballFlight();
+
+    /*
+     * Position the football in the player's hands.
+     */
+    this.football.x =
+        this.player.x + 10;
+
+    this.football.y =
+        this.player.y + 2;
+
+    this.takeFootballPossession();
+
+    console.log(
+        "Player marked the football."
+    );
 }
 
 startFootballGroundBounce() {
@@ -2157,8 +2306,10 @@ stopFootballFlight() {
     this.footballVelocityY = 0;
 
     this.footballRotationSpeed = 0;
-    this.footballFlightTime = 0;
-    this.footballFlightType = null;
+this.footballFlightTime = 0;
+this.footballFlightDistance = 0;
+this.footballCanBeMarked = false;
+this.footballFlightType = null;
 
     this.footballBounceCount = 0;
     this.footballGroundBounceTimer = 0;
@@ -2189,6 +2340,8 @@ this.footballVelocityY = 0;
 
 this.footballRotationSpeed = 0;
 this.footballFlightTime = 0;
+this.footballFlightDistance = 0;
+this.footballCanBeMarked = false;
 this.footballFlightType = null;
 
 this.footballBounceCount = 0;
