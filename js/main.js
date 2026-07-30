@@ -234,7 +234,28 @@ this.football = this.add.ellipse(
 
     // Possession
     this.playerHasBall = false;
-    this.ballPickupDistance = 24;
+/*
+ * Loose-ball pickup settings.
+ */
+this.ballPickupDistance = 24;
+
+/*
+ * Running players receive a small pickup-distance bonus.
+ */
+this.runningPickupBonus = 6;
+
+/*
+ * Prevent the player from immediately recollecting
+ * their own disposal.
+ */
+this.footballPickupLockTimer = 0;
+this.footballPickupLockDuration = 220;
+
+/*
+ * During a ground bounce, the football can only be
+ * collected when it is close to the ground.
+ */
+this.maximumPickupBounceCurve = 0.32;
 
 // Ball movement
 this.footballInFlight = false;
@@ -1047,6 +1068,13 @@ launchFootball(horizontalDrag, verticalDrag, isKick) {
     this.playerHasBall = false;
     this.footballInFlight = true;
 
+    /*
+ * Briefly prevent the player from recollecting the
+ * disposal as it leaves their hands or boot.
+ */
+this.footballPickupLockTimer =
+    this.footballPickupLockDuration;
+
     this.footballFlightType =
         isKick ? "KICK" : "HANDBALL";
 
@@ -1217,14 +1245,21 @@ update(time, delta) {
         verticalDirection += 1;
     }
 
-    const direction = new Phaser.Math.Vector2(
-        horizontalDirection,
-        verticalDirection
-    );
+const direction = new Phaser.Math.Vector2(
+    horizontalDirection,
+    verticalDirection
+);
 
-    if (direction.length() > 0) {
-        direction.normalize();
-    }
+/*
+ * Record whether the controlled player is currently
+ * moving before normalising the direction.
+ */
+this.playerIsMoving =
+    direction.length() > 0;
+
+if (this.playerIsMoving) {
+    direction.normalize();
+}
 
     const moveDistance =
         this.playerSpeed * (delta / 1000);
@@ -1257,7 +1292,7 @@ this.updateOpponentChase(delta);
 this.updateFootballFlight(delta);
 this.updateFootballMarking();
 this.updateFootballGroundPhysics(delta);
-this.updateFootballPossession();
+this.updateFootballPossession(delta);
 this.keepFootballInsideField();
 
 /*
@@ -1707,23 +1742,73 @@ updateBallBounceAnimation(delta) {
     }
 }
 
-updateFootballPossession() {
+updateFootballPossession(delta) {
     if (!this.football) {
         return;
     }
 
+    /*
+     * Count down the brief pickup lock after a disposal.
+     */
+    if (this.footballPickupLockTimer > 0) {
+        this.footballPickupLockTimer =
+            Math.max(
+                0,
+                this.footballPickupLockTimer - delta
+            );
+    }
+
+    /*
+     * The player cannot collect a football that is still
+     * travelling through the air.
+     */
     if (this.footballInFlight) {
         return;
     }
 
+    /*
+     * Keep the football attached to the controlled
+     * player while they have possession.
+     */
     if (this.playerHasBall) {
         if (!this.isBallBouncing) {
-            this.football.x = this.player.x + 10;
-            this.football.y = this.player.y + 2;
+            this.football.x =
+                this.player.x + 10;
+
+            this.football.y =
+                this.player.y + 2;
         }
 
         return;
     }
+
+    /*
+     * Do not allow an immediate recollection after the
+     * player disposes of the football.
+     */
+    if (this.footballPickupLockTimer > 0) {
+        return;
+    }
+
+    /*
+     * A bouncing football can only be collected when it
+     * is visually close to the ground.
+     */
+    if (!this.footballIsAvailableForPickup()) {
+        return;
+    }
+
+    /*
+     * Running players receive a small pickup-radius
+     * bonus, representing a clean running pickup.
+     */
+    const currentPickupDistance =
+        this.ballPickupDistance +
+        (
+            this.playerIsMoving
+                ? this.runningPickupBonus
+                : 0
+        );
 
     const distanceToBall =
         Phaser.Math.Distance.Between(
@@ -1733,9 +1818,79 @@ updateFootballPossession() {
             this.football.y
         );
 
-    if (distanceToBall <= this.ballPickupDistance) {
-        this.takeFootballPossession();
+    if (
+        distanceToBall <=
+        currentPickupDistance
+    ) {
+        this.completeLooseBallPickup();
     }
+}
+
+footballIsAvailableForPickup() {
+    /*
+     * A stationary or rolling football is always
+     * available for collection.
+     */
+    if (
+        this.footballGroundState === "NONE" ||
+        this.footballGroundState === "ROLLING"
+    ) {
+        return true;
+    }
+
+    /*
+     * During a bounce, only allow collection when the
+     * football is near the beginning or end of its arc.
+     */
+    if (
+        this.footballGroundState === "BOUNCING"
+    ) {
+        const bounceProgress =
+            Phaser.Math.Clamp(
+                this.footballGroundBounceTimer /
+                    this.footballGroundBounceDuration,
+                0,
+                1
+            );
+
+        const bounceCurve =
+            Math.sin(
+                bounceProgress *
+                Math.PI
+            );
+
+        return (
+            bounceCurve <=
+            this.maximumPickupBounceCurve
+        );
+    }
+
+    return false;
+}
+
+completeLooseBallPickup() {
+    /*
+     * Stop any remaining ground movement.
+     */
+    this.stopFootballFlight();
+
+    /*
+     * Place the football directly into the controlled
+     * player's possession.
+     */
+    this.football.x =
+        this.player.x + 10;
+
+    this.football.y =
+        this.player.y + 2;
+
+    this.takeFootballPossession();
+
+    console.log(
+        this.playerIsMoving
+            ? "Player completed a running pickup."
+            : "Player collected the loose football."
+    );
 }
 
 updateFootballFlight(delta) {
@@ -2332,6 +2487,8 @@ this.footballFlightType = null;
 
 takeFootballPossession() {
     this.playerHasBall = true;
+    this.footballPickupLockTimer = 0;
+    
     this.footballInFlight = false;
 this.footballGroundState = "NONE";
 
