@@ -655,6 +655,13 @@ this.tackleDistance = 26;
 this.isTackleActive = false;
 
 /*
+ * Players remain locked together briefly once a tackle
+ * begins.
+ */
+this.tackleTimer = 0;
+this.tackleDuration = 350;
+
+/*
  * Prevent the player from immediately marking the
  * football as it leaves their boot.
  */
@@ -1648,7 +1655,7 @@ this.updateFootballFlight(delta);
 this.updateFootballMarking();
 this.updateFootballGroundPhysics(delta);
 this.updateFootballPossession(delta);
-this.updateTackleDetection();
+this.updateTackleDetection(delta);
 this.keepFootballInsideField();
 
 /*
@@ -3589,15 +3596,16 @@ this.footballFlightType = null;
     );
 }
 
-updateTackleDetection() {
+updateTackleDetection(delta) {
     /*
      * A tackle can only occur while somebody has
      * possession of the football.
      */
-    if (!this.possessionOwner) {
-        this.isTackleActive = false;
-        return;
-    }
+if (!this.possessionOwner) {
+    this.isTackleActive = false;
+    this.tackleTimer = 0;
+    return;
+}
 
     let defender = null;
 
@@ -3629,16 +3637,44 @@ updateTackleDetection() {
             this.possessionOwner.y
         );
 
-    if (
-        tackleDistance <= this.tackleDistance
-    ) {
-        if (!this.isTackleActive) {
-            this.isTackleActive = true;
+if (
+    tackleDistance <= this.tackleDistance
+) {
 
-            console.log("Tackle started.");
-        }
-    } else {
-        this.isTackleActive = false;
+    if (!this.isTackleActive) {
+
+        this.isTackleActive = true;
+        this.tackleTimer = this.tackleDuration;
+
+        console.log("Tackle started.");
+    }
+
+    if (this.tackleTimer > 0) {
+
+        this.tackleTimer -= delta;
+
+        /*
+         * Keep both players together while the tackle
+         * is active.
+         */
+        const midpointX =
+            (defender.x + this.possessionOwner.x) / 2;
+
+        const midpointY =
+            (defender.y + this.possessionOwner.y) / 2;
+
+        defender.x = midpointX;
+        defender.y = midpointY;
+
+        this.possessionOwner.x = midpointX;
+        this.possessionOwner.y = midpointY;
+    }
+
+    return;
+}
+    else {
+   this.isTackleActive = false;
+this.tackleTimer = 0;
     }
 }
 
