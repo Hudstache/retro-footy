@@ -3135,16 +3135,65 @@ updateFootballMarking() {
             this.footballRotationSpeed =
                 spoilDirection * 720;
 
-            this.football.setStrokeStyle(
-                2,
-                0xffffff
-            );
+this.football.setStrokeStyle(
+    2,
+    0xffffff
+);
 
-            console.log(
-                "The marking contest was spoiled."
-            );
+/*
+ * Briefly enlarge both contesting players so the
+ * spoil is easy to see.
+ */
+this.tweens.add({
+    targets: [
+        closestCandidate.player,
+        secondCandidate.player
+    ],
 
-            return;
+    scaleX: 1.35,
+    scaleY: 1.35,
+
+    duration: 90,
+    yoyo: true,
+
+    ease: "Power1"
+});
+
+/*
+ * Briefly flash both players white.
+ */
+const originalClosestColour =
+    closestCandidate.player.fillColor;
+
+const originalSecondColour =
+    secondCandidate.player.fillColor;
+
+closestCandidate.player.setFillStyle(
+    0xffffff
+);
+
+secondCandidate.player.setFillStyle(
+    0xffffff
+);
+
+this.time.delayedCall(
+    140,
+    () => {
+        closestCandidate.player.setFillStyle(
+            originalClosestColour
+        );
+
+        secondCandidate.player.setFillStyle(
+            originalSecondColour
+        );
+    }
+);
+
+console.log(
+    "The marking contest was spoiled."
+);
+
+return;
         }
     }
 
