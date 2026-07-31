@@ -189,8 +189,8 @@ createPlayer() {
 
 createTeammate() {
 this.teammate = this.add.rectangle(
-    this.field.centreX + 120,
-    this.field.centreY - 55,
+    this.field.centreX + 155,
+    this.field.centreY - 95,
         22,
         30,
         0x2185d0
@@ -502,8 +502,8 @@ selectNearestHomeDefender() {
 
 createOpponent() {
 this.opponent = this.add.rectangle(
-    this.field.centreX + 55,
-    this.field.centreY + 70,
+    this.field.centreX + 170,
+    this.field.centreY + 120,
         22,
         30,
         0x2fa84f
@@ -1986,16 +1986,96 @@ const pressureDistance = 55;
         return;
     }
 
-    /*
-     * When the football is loose or airborne, marking
-     * and pickup systems determine possession.
-     */
+/*
+ * While the football is airborne, Green holds his
+ * current position.
+ *
+ * The marking system determines whether he is close
+ * enough to take a mark.
+ */
+if (this.footballInFlight) {
     this.opponentData.state =
-        "WAIT";
+        "TRACK_FLIGHT";
 
     this.keepObjectInsideField(
         this.opponent
     );
+
+    return;
+}
+
+/*
+ * When nobody owns the football and it is no longer
+ * airborne, Green chases the loose ball.
+ */
+this.opponentData.state =
+    "CHASE_LOOSE";
+
+const directionToFootball =
+    new Phaser.Math.Vector2(
+        this.football.x -
+            this.opponent.x,
+
+        this.football.y -
+            this.opponent.y
+    );
+
+const distanceToFootball =
+    directionToFootball.length();
+
+/*
+ * Green stops just inside the existing pickup range.
+ *
+ * updateFootballPossession() will then award him
+ * possession when he is close enough.
+ */
+const looseBallStoppingDistance =
+    Math.max(
+        4,
+        this.ballPickupDistance - 4
+    );
+
+if (
+    distanceToFootball <=
+    looseBallStoppingDistance
+) {
+    this.keepObjectInsideField(
+        this.opponent
+    );
+
+    return;
+}
+
+directionToFootball.normalize();
+
+/*
+ * Green moves faster when attacking a loose football
+ * than he does during normal defensive pressure.
+ */
+const looseBallChaseSpeed = 145;
+
+const maximumMovement =
+    looseBallChaseSpeed *
+    deltaSeconds;
+
+const movementDistance =
+    Math.min(
+        maximumMovement,
+        distanceToFootball -
+            looseBallStoppingDistance
+    );
+
+this.opponent.x +=
+    directionToFootball.x *
+    movementDistance;
+
+this.opponent.y +=
+    directionToFootball.y *
+    movementDistance;
+
+this.keepObjectInsideField(
+    this.opponent
+);
 }
 
 updateCameraTarget() {
