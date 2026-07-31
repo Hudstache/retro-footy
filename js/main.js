@@ -84,7 +84,9 @@ this.scale.on(
     this
 );
 
-    console.log("Retro Footy football possession loaded.");
+console.log(
+    "Step 14F team possession system loaded."
+);
 }
 
 handleGameResize() {
@@ -300,6 +302,204 @@ switchControlledPlayer(newControlledPlayer) {
     );
 }
 
+isHomePlayer(playerObject) {
+    return (
+        playerObject === this.player ||
+        playerObject === this.teammate
+    );
+}
+
+hasHomePossession() {
+    return (
+        this.possessionOwner !== null &&
+        this.isHomePlayer(
+            this.possessionOwner
+        )
+    );
+}
+
+hasAwayPossession() {
+    return (
+        this.possessionOwner ===
+        this.opponent
+    );
+}
+
+clearPossession() {
+    /*
+     * Remove possession from every player.
+     */
+    this.possessionOwner = null;
+
+    this.playerHasBall = false;
+
+    if (this.teammateData) {
+        this.teammateData.hasBall = false;
+    }
+
+    if (this.opponentData) {
+        this.opponentData.hasBall = false;
+    }
+
+    /*
+     * Stop the carried-ball bounce animation.
+     */
+    this.distanceRunWithBall = 0;
+    this.isBallBouncing = false;
+    this.ballBounceTimer = 0;
+
+    if (this.football) {
+        this.football.setStrokeStyle(
+            2,
+            0xffffff
+        );
+    }
+}
+
+setPossessionOwner(newOwner) {
+    if (!newOwner) {
+        this.clearPossession();
+        return;
+    }
+
+    const ownerIsHomePlayer =
+        this.isHomePlayer(newOwner);
+
+    /*
+     * Stop any flight, bounce or rolling movement before
+     * placing the football into a player's possession.
+     */
+    this.stopFootballFlight();
+
+    this.possessionOwner =
+        newOwner;
+
+    this.playerHasBall =
+        ownerIsHomePlayer;
+
+    if (this.teammateData) {
+        this.teammateData.hasBall =
+            newOwner === this.teammate;
+    }
+
+    if (this.opponentData) {
+        this.opponentData.hasBall =
+            newOwner === this.opponent;
+    }
+
+    /*
+     * A home player with possession must always become
+     * the controlled player.
+     */
+    if (ownerIsHomePlayer) {
+        if (
+            newOwner !==
+            this.controlledPlayer
+        ) {
+            this.switchControlledPlayer(
+                newOwner
+            );
+        }
+    } else {
+        /*
+         * The away player remains controlled by AI.
+         *
+         * The user instead controls the nearest home
+         * defender.
+         */
+        this.selectNearestHomeDefender();
+
+        this.cancelPassAim();
+        this.resetTouchMovement();
+    }
+
+    this.footballPickupLockTimer = 0;
+
+    this.distanceRunWithBall = 0;
+    this.isBallBouncing = false;
+    this.ballBounceTimer = 0;
+
+    /*
+     * Attach the ball to the correct owner immediately.
+     */
+    this.attachFootballToPossessionOwner();
+
+    this.football.setStrokeStyle(
+        2,
+        ownerIsHomePlayer
+            ? 0xffff00
+            : 0x7cff7c
+    );
+}
+
+attachFootballToPossessionOwner() {
+    if (
+        !this.football ||
+        !this.possessionOwner
+    ) {
+        return;
+    }
+
+    /*
+     * Home players currently attack toward the right.
+     *
+     * The away player carries the football on their
+     * left side while moving in the opposite direction.
+     */
+    const carryOffsetX =
+        this.hasAwayPossession()
+            ? -10
+            : 10;
+
+    this.football.x =
+        this.possessionOwner.x +
+        carryOffsetX;
+
+    this.football.y =
+        this.possessionOwner.y + 2;
+}
+
+selectNearestHomeDefender() {
+    if (
+        !this.player ||
+        !this.teammate ||
+        !this.opponent
+    ) {
+        return;
+    }
+
+    const redDistance =
+        Phaser.Math.Distance.Between(
+            this.player.x,
+            this.player.y,
+            this.opponent.x,
+            this.opponent.y
+        );
+
+    const blueDistance =
+        Phaser.Math.Distance.Between(
+            this.teammate.x,
+            this.teammate.y,
+            this.opponent.x,
+            this.opponent.y
+        );
+
+    const nearestDefender =
+        redDistance <= blueDistance
+            ? this.player
+            : this.teammate;
+
+    this.switchControlledPlayer(
+        nearestDefender
+    );
+
+    console.log(
+        nearestDefender === this.player
+            ? "Red selected as nearest defender."
+            : "Blue selected as nearest defender."
+    );
+}
+
 createOpponent() {
 this.opponent = this.add.rectangle(
     this.field.centreX + 55,
@@ -336,7 +536,25 @@ this.football = this.add.ellipse(
     this.football.setStrokeStyle(2, 0xffffff);
 
     // Possession
-    this.playerHasBall = false;
+/*
+ * The player object that currently owns the football.
+ *
+ * Possible values:
+ *
+ * this.player
+ * this.teammate
+ * this.opponent
+ * null
+ */
+this.possessionOwner = null;
+
+/*
+ * Keep this temporary compatibility flag while older
+ * home-possession systems are migrated.
+ *
+ * It is now updated only by the possession-owner system.
+ */
+this.playerHasBall = false;
 /*
  * Loose-ball pickup settings.
  */
@@ -942,9 +1160,13 @@ beginPassAim(pointer) {
     /*
      * The player must have possession.
      */
-    if (!this.playerHasBall) {
-        return;
-    }
+if (
+    !this.hasHomePossession() ||
+    this.possessionOwner !==
+        this.controlledPlayer
+) {
+    return;
+}
 
     /*
      * Do not begin another pass while one is already being aimed.
@@ -1160,16 +1382,33 @@ cancelPassAim() {
 }
 
 launchFootball(horizontalDrag, verticalDrag, isKick) {
-    if (!this.playerHasBall) {
-        return;
-    }
+if (
+    !this.hasHomePossession() ||
+    this.possessionOwner !==
+        this.controlledPlayer
+) {
+    return;
+}
 
     /*
      * Transfer possession from the player to the
      * travelling football.
      */
-    this.playerHasBall = false;
-    this.footballInFlight = true;
+/*
+ * Remember who disposed of the football.
+ *
+ * This will later help with turnovers, statistics and
+ * player-specific kicking attributes.
+ */
+this.lastDisposalPlayer =
+    this.controlledPlayer;
+
+/*
+ * The football becomes unowned while travelling.
+ */
+this.clearPossession();
+
+this.footballInFlight = true;
 
     /*
  * Briefly prevent the player from recollecting the
@@ -1418,6 +1657,76 @@ updateTeammateSupport(delta) {
     }
 
     /*
+ * During away possession, the supporting home player
+ * also moves toward the opponent as a secondary
+ * defender.
+ */
+if (this.hasAwayPossession()) {
+    const defensiveOffsetY =
+        this.supportPlayer.y <=
+        this.opponent.y
+            ? -34
+            : 34;
+
+    const targetX =
+        this.opponent.x + 18;
+
+    const targetY =
+        this.opponent.y +
+        defensiveOffsetY;
+
+    const correctedTarget =
+        this.getPointInsideField(
+            targetX,
+            targetY
+        );
+
+    const directionToTarget =
+        new Phaser.Math.Vector2(
+            correctedTarget.x -
+                this.supportPlayer.x,
+
+            correctedTarget.y -
+                this.supportPlayer.y
+        );
+
+    const distanceToTarget =
+        directionToTarget.length();
+
+    const stoppingDistance = 30;
+
+    if (
+        distanceToTarget >
+        stoppingDistance
+    ) {
+        directionToTarget.normalize();
+
+        const movementDistance =
+            Math.min(
+                this.teammateData.speed *
+                    (delta / 1000),
+
+                distanceToTarget -
+                    stoppingDistance
+            );
+
+        this.supportPlayer.x +=
+            directionToTarget.x *
+            movementDistance;
+
+        this.supportPlayer.y +=
+            directionToTarget.y *
+            movementDistance;
+    }
+
+    this.keepObjectInsideField(
+        this.supportPlayer
+    );
+
+    return;
+}
+
+    /*
      * The supporting player tries to remain ahead of
      * the currently controlled player.
      */
@@ -1517,78 +1826,176 @@ updateTeammateSupport(delta) {
 }
 
 updateOpponentChase(delta) {
-if (
-    !this.opponent ||
-    !this.controlledPlayer
-) {
-    return;
-}
+    if (
+        !this.opponent ||
+        !this.controlledPlayer
+    ) {
+        return;
+    }
+
+    const deltaSeconds =
+        delta / 1000;
 
     /*
-     * For now, the opponent only chases when the
-     * controlled player has possession.
+     * When the opponent has possession, they carry the
+     * football toward the left side of the ground.
      */
-if (!this.playerHasBall) {
-    this.opponentData.state = "WAIT";
-this.keepObjectInsideField(this.opponent);
-    return;
-}
+    if (this.hasAwayPossession()) {
+        this.opponentData.state =
+            "CARRY";
 
-    this.opponentData.state = "CHASE";
+        const carryTargetX =
+            this.opponent.x - 140;
+
+        /*
+         * Move slightly toward the centre corridor while
+         * advancing.
+         */
+        const carryTargetY =
+            Phaser.Math.Linear(
+                this.opponent.y,
+                this.field.centreY,
+                0.28
+            );
+
+        const correctedTarget =
+            this.getPointInsideField(
+                carryTargetX,
+                carryTargetY
+            );
+
+        const carryDirection =
+            new Phaser.Math.Vector2(
+                correctedTarget.x -
+                    this.opponent.x,
+
+                correctedTarget.y -
+                    this.opponent.y
+            );
+
+        if (carryDirection.length() > 0) {
+            carryDirection.normalize();
+        }
+
+        const carrySpeed = 118;
+
+        this.opponent.x +=
+            carryDirection.x *
+            carrySpeed *
+            deltaSeconds;
+
+        this.opponent.y +=
+            carryDirection.y *
+            carrySpeed *
+            deltaSeconds;
+
+        this.keepObjectInsideField(
+            this.opponent
+        );
+
+        return;
+    }
 
     /*
-     * The opponent targets the controlled player's
-     * current position.
+     * Chase the home ball carrier during home
+     * possession.
      */
+    if (this.hasHomePossession()) {
+        this.opponentData.state =
+            "CHASE";
+
+/*
+ * Instead of standing directly on top of the ball
+ * carrier, defend slightly goal-side and offset.
+ */
+
+const goalSideOffset = 40;
+
+const lateralOffset =
+    this.opponent.y < this.possessionOwner.y
+        ? -30
+        : 30;
+
 const targetX =
-    this.controlledPlayer.x;
+    this.possessionOwner.x + goalSideOffset;
 
 const targetY =
-    this.controlledPlayer.y;
+    this.possessionOwner.y + lateralOffset;
 
-    this.opponentData.targetX = targetX;
-    this.opponentData.targetY = targetY;
+        this.opponentData.targetX =
+            targetX;
 
-    const directionToPlayer =
-        new Phaser.Math.Vector2(
-            targetX - this.opponent.x,
-            targetY - this.opponent.y
+        this.opponentData.targetY =
+            targetY;
+
+        const directionToPlayer =
+            new Phaser.Math.Vector2(
+                targetX -
+                    this.opponent.x,
+
+                targetY -
+                    this.opponent.y
+            );
+
+        const distanceToPlayer =
+            directionToPlayer.length();
+
+/*
+ * Green now applies pressure without standing
+ * directly beside the ball carrier.
+ */
+
+const pressureDistance = 55;
+
+        if (
+            distanceToPlayer <=
+            pressureDistance
+        ) {
+            this.keepObjectInsideField(
+                this.opponent
+            );
+
+            return;
+        }
+
+        directionToPlayer.normalize();
+
+        const maximumMovement =
+            this.opponentData.speed *
+            deltaSeconds;
+
+        const movementDistance =
+            Math.min(
+                maximumMovement,
+                distanceToPlayer -
+                    pressureDistance
+            );
+
+        this.opponent.x +=
+            directionToPlayer.x *
+            movementDistance;
+
+        this.opponent.y +=
+            directionToPlayer.y *
+            movementDistance;
+
+        this.keepObjectInsideField(
+            this.opponent
         );
 
-    const distanceToPlayer =
-        directionToPlayer.length();
+        return;
+    }
 
     /*
-     * Stop before completely overlapping the player.
-     * Tackling will be added in a later step.
+     * When the football is loose or airborne, marking
+     * and pickup systems determine possession.
      */
-    const pressureDistance = 28;
+    this.opponentData.state =
+        "WAIT";
 
-if (distanceToPlayer <= pressureDistance) {
-this.keepObjectInsideField(this.opponent);
-    return;
-}
-
-    directionToPlayer.normalize();
-
-    const deltaSeconds = delta / 1000;
-
-    const maximumMovement =
-        this.opponentData.speed * deltaSeconds;
-
-    const movementDistance =
-        Math.min(
-            maximumMovement,
-            distanceToPlayer - pressureDistance
-        );
-
-    this.opponent.x +=
-        directionToPlayer.x * movementDistance;
-
-    this.opponent.y +=
-        directionToPlayer.y * movementDistance;
-
-this.keepObjectInsideField(this.opponent);
+    this.keepObjectInsideField(
+        this.opponent
+    );
 }
 
 updateCameraTarget() {
@@ -1607,17 +2014,28 @@ updateCameraTarget() {
      *
      * Retro Footy currently attacks toward the right.
      */
-if (this.playerHasBall) {
+/*
+ * Follow the current ball carrier, regardless of which
+ * team owns the football.
+ */
+if (this.possessionOwner) {
+    const possessionLookAheadX =
+        this.hasAwayPossession()
+            ? -this.cameraSettings
+                .playerLookAheadX
+            : this.cameraSettings
+                .playerLookAheadX;
+
     this.cameraTarget.x =
-        this.controlledPlayer.x +
-        this.cameraSettings.playerLookAheadX;
+        this.possessionOwner.x +
+        possessionLookAheadX;
 
     this.cameraTarget.y =
-        this.controlledPlayer.y;
+        this.possessionOwner.y;
 
-        this.keepCameraTargetInsideWorld();
-        return;
-    }
+    this.keepCameraTargetInsideWorld();
+    return;
+}
 
     /*
      * While the football is travelling, use its velocity
@@ -1802,7 +2220,11 @@ keepObjectInsideField(
 }
 
 updateAutomaticBounce(distanceMoved, delta) {
-    if (!this.playerHasBall) {
+if (
+    !this.hasHomePossession() ||
+    this.possessionOwner !==
+        this.controlledPlayer
+) {
         this.distanceRunWithBall = 0;
         return;
     }
@@ -1827,7 +2249,11 @@ updateAutomaticBounce(distanceMoved, delta) {
 }
 
 startAutomaticBounce() {
-    if (!this.playerHasBall) {
+if (
+    !this.hasHomePossession() ||
+    this.possessionOwner !==
+        this.controlledPlayer
+) {
         return;
     }
 
@@ -1886,26 +2312,25 @@ updateFootballPossession(delta) {
     }
 
     /*
-     * Airborne possession is handled by the marking
-     * system rather than ground-ball pickup.
+     * While possession exists, attach the football to
+     * the correct player.
      */
-    if (this.footballInFlight) {
+    if (this.possessionOwner) {
+        if (
+            !this.isBallBouncing ||
+            this.hasAwayPossession()
+        ) {
+            this.attachFootballToPossessionOwner();
+        }
+
         return;
     }
 
     /*
-     * Attach the football to whichever home player is
-     * currently controlled and has possession.
+     * Airborne footballs are handled by the marking
+     * system.
      */
-    if (this.playerHasBall) {
-        if (!this.isBallBouncing) {
-            this.football.x =
-                this.controlledPlayer.x + 10;
-
-            this.football.y =
-                this.controlledPlayer.y + 2;
-        }
-
+    if (this.footballInFlight) {
         return;
     }
 
@@ -1918,8 +2343,11 @@ updateFootballPossession(delta) {
     }
 
     /*
-     * Check the controlled player first.
+     * Build a list of players close enough to collect
+     * the loose football.
      */
+    const pickupCandidates = [];
+
     const controlledPickupDistance =
         this.ballPickupDistance +
         (
@@ -1928,7 +2356,7 @@ updateFootballPossession(delta) {
                 : 0
         );
 
-    const controlledDistanceToBall =
+    const controlledDistance =
         Phaser.Math.Distance.Between(
             this.controlledPlayer.x,
             this.controlledPlayer.y,
@@ -1937,24 +2365,19 @@ updateFootballPossession(delta) {
         );
 
     if (
-        controlledDistanceToBall <=
+        controlledDistance <=
         controlledPickupDistance
     ) {
-        this.completeLooseBallPickup(
-            this.controlledPlayer
-        );
+        pickupCandidates.push({
+            player:
+                this.controlledPlayer,
 
-        return;
+            distance:
+                controlledDistance
+        });
     }
 
-    /*
-     * The supporting home player can also collect a
-     * loose football.
-     *
-     * When this occurs, control immediately switches to
-     * that player.
-     */
-    const supportDistanceToBall =
+    const supportDistance =
         Phaser.Math.Distance.Between(
             this.supportPlayer.x,
             this.supportPlayer.y,
@@ -1963,13 +2386,56 @@ updateFootballPossession(delta) {
         );
 
     if (
-        supportDistanceToBall <=
+        supportDistance <=
         this.ballPickupDistance
     ) {
-        this.completeLooseBallPickup(
-            this.supportPlayer
-        );
+        pickupCandidates.push({
+            player:
+                this.supportPlayer,
+
+            distance:
+                supportDistance
+        });
     }
+
+    const opponentDistance =
+        Phaser.Math.Distance.Between(
+            this.opponent.x,
+            this.opponent.y,
+            this.football.x,
+            this.football.y
+        );
+
+    if (
+        opponentDistance <=
+        this.ballPickupDistance
+    ) {
+        pickupCandidates.push({
+            player:
+                this.opponent,
+
+            distance:
+                opponentDistance
+        });
+    }
+
+    if (pickupCandidates.length === 0) {
+        return;
+    }
+
+    /*
+     * When several players reach the football together,
+     * award possession to the closest one.
+     */
+    pickupCandidates.sort(
+        (firstCandidate, secondCandidate) =>
+            firstCandidate.distance -
+            secondCandidate.distance
+    );
+
+    this.completeLooseBallPickup(
+        pickupCandidates[0].player
+    );
 }
 
 footballIsAvailableForPickup() {
@@ -2019,30 +2485,29 @@ completeLooseBallPickup(receivingPlayer) {
         return;
     }
 
-    const controlWillSwitch =
-        receivingPlayer !==
+    const previousControlledPlayer =
         this.controlledPlayer;
 
-    this.stopFootballFlight();
+    const receiverIsOpponent =
+        receivingPlayer ===
+        this.opponent;
 
-    /*
-     * Transfer control before attaching the football.
-     */
-    if (controlWillSwitch) {
-        this.switchControlledPlayer(
-            receivingPlayer
-        );
-    }
+    const controlWillSwitch =
+        !receiverIsOpponent &&
+        receivingPlayer !==
+            previousControlledPlayer;
 
-    this.football.x =
-        this.controlledPlayer.x + 10;
-
-    this.football.y =
-        this.controlledPlayer.y + 2;
-
-    this.takeFootballPossession(
-        this.controlledPlayer
+    this.setPossessionOwner(
+        receivingPlayer
     );
+
+    if (receiverIsOpponent) {
+        console.log(
+            "Opponent collected the loose football."
+        );
+
+        return;
+    }
 
     if (controlWillSwitch) {
         console.log(
@@ -2257,78 +2722,95 @@ updateFootballMarking() {
     }
 
     /*
-     * Check whether the currently controlled player has
-     * reached the kick.
+     * Check every player who can currently contest the
+     * kick.
      */
-    const controlledDistanceToBall =
-        Phaser.Math.Distance.Between(
-            this.controlledPlayer.x,
-            this.controlledPlayer.y,
-            this.football.x,
-            this.football.y
-        );
+    const markingCandidates = [
+        this.controlledPlayer,
+        this.supportPlayer,
+        this.opponent
+    ];
+
+    const successfulCandidates = [];
+
+    markingCandidates.forEach(
+        (candidatePlayer) => {
+            if (!candidatePlayer) {
+                return;
+            }
+
+            const distanceToFootball =
+                Phaser.Math.Distance.Between(
+                    candidatePlayer.x,
+                    candidatePlayer.y,
+                    this.football.x,
+                    this.football.y
+                );
+
+            if (
+                distanceToFootball <=
+                this.playerMarkDistance
+            ) {
+                successfulCandidates.push({
+                    player:
+                        candidatePlayer,
+
+                    distance:
+                        distanceToFootball
+                });
+            }
+        }
+    );
 
     if (
-        controlledDistanceToBall <=
-        this.playerMarkDistance
+        successfulCandidates.length === 0
     ) {
-        this.completeHomePlayerMark(
-            this.controlledPlayer
-        );
-
         return;
     }
 
     /*
-     * The supporting player can also mark the football.
-     *
-     * Successful possession automatically transfers
-     * control to that player.
+     * If multiple players reach the ball during the same
+     * frame, the closest player wins the mark.
      */
-    const supportDistanceToBall =
-        Phaser.Math.Distance.Between(
-            this.supportPlayer.x,
-            this.supportPlayer.y,
-            this.football.x,
-            this.football.y
-        );
+    successfulCandidates.sort(
+        (firstCandidate, secondCandidate) =>
+            firstCandidate.distance -
+            secondCandidate.distance
+    );
 
-    if (
-        supportDistanceToBall <=
-        this.playerMarkDistance
-    ) {
-        this.completeHomePlayerMark(
-            this.supportPlayer
-        );
-    }
+    this.completePlayerMark(
+        successfulCandidates[0].player
+    );
 }
 
-completeHomePlayerMark(receivingPlayer) {
+completePlayerMark(receivingPlayer) {
     if (!receivingPlayer) {
         return;
     }
 
-    const controlWillSwitch =
-        receivingPlayer !==
+    const receiverIsOpponent =
+        receivingPlayer ===
+        this.opponent;
+
+    const previousControlledPlayer =
         this.controlledPlayer;
 
-    this.stopFootballFlight();
+    const controlWillSwitch =
+        !receiverIsOpponent &&
+        receivingPlayer !==
+            previousControlledPlayer;
 
-    if (controlWillSwitch) {
-        this.switchControlledPlayer(
-            receivingPlayer
-        );
-    }
-
-    this.football.x =
-        this.controlledPlayer.x + 10;
-
-    this.football.y =
-        this.controlledPlayer.y + 2;
-
-    this.takeFootballPossession(
-        this.controlledPlayer
+    this.setPossessionOwner(
+        receivingPlayer
     );
+
+    if (receiverIsOpponent) {
+        console.log(
+            "Opponent marked the football."
+        );
+
+        return;
+    }
 
     console.log(
         controlWillSwitch
@@ -2677,64 +3159,39 @@ this.footballFlightType = null;
     );
 }
 
-takeFootballPossession(receivingPlayer = this.controlledPlayer) {
-        if (!receivingPlayer) {
-        return;
-    }
-
-    if (
-        receivingPlayer !==
-        this.controlledPlayer
-    ) {
-        this.switchControlledPlayer(
-            receivingPlayer
-        );
-    }
-    this.playerHasBall = true;
-    this.footballPickupLockTimer = 0;
-
-    this.footballInFlight = false;
-this.footballGroundState = "NONE";
-
-this.footballVelocityX = 0;
-this.footballVelocityY = 0;
-
-this.footballRotationSpeed = 0;
-this.footballFlightTime = 0;
-this.footballFlightDistance = 0;
-this.footballCanBeMarked = false;
-this.footballFlightType = null;
-
-this.footballBounceCount = 0;
-this.footballGroundBounceTimer = 0;
-this.footballGroundBounceDuration = 260;
-this.footballBounceHeight = 0;
-
-this.football.setScale(
-    this.footballBaseScaleX,
-    this.footballBaseScaleY
-);
-    this.distanceRunWithBall = 0;
-    this.isBallBouncing = false;
-
-    this.football.setStrokeStyle(
-        2,
-        0xffff00
+takeFootballPossession(
+    receivingPlayer = this.controlledPlayer
+) {
+    /*
+     * Compatibility wrapper for older gameplay code.
+     *
+     * All real possession changes now pass through the
+     * authoritative possession-owner system.
+     */
+    this.setPossessionOwner(
+        receivingPlayer
     );
 }
 
 dropFootball() {
-    if (!this.playerHasBall) {
+    if (
+        !this.hasHomePossession() ||
+        this.possessionOwner !==
+            this.controlledPlayer
+    ) {
         return;
     }
 
-    this.playerHasBall = false;
+    const droppingPlayer =
+        this.controlledPlayer;
 
-this.football.x =
-    this.controlledPlayer.x + 24;
+    this.clearPossession();
 
-this.football.y =
-    this.controlledPlayer.y;
+    this.football.x =
+        droppingPlayer.x + 24;
+
+    this.football.y =
+        droppingPlayer.y;
 
     this.football.setStrokeStyle(
         2,
@@ -2755,9 +3212,12 @@ keepPlayerInsideField() {
 }
 
 keepFootballInsideField() {
-    if (!this.football || this.playerHasBall) {
-        return;
-    }
+if (
+    !this.football ||
+    this.possessionOwner
+) {
+    return;
+}
 
     const {
         centreX,
