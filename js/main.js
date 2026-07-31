@@ -1726,6 +1726,80 @@ if (this.hasAwayPossession()) {
     return;
 }
 
+/*
+ * When nobody has possession and the football is on
+ * the ground, the supporting home player automatically
+ * chases the loose football.
+ *
+ * The user still controls the selected home player.
+ */
+if (
+    !this.possessionOwner &&
+    !this.footballInFlight
+) {
+    const directionToFootball =
+        new Phaser.Math.Vector2(
+            this.football.x -
+                this.supportPlayer.x,
+
+            this.football.y -
+                this.supportPlayer.y
+        );
+
+    const distanceToFootball =
+        directionToFootball.length();
+
+    /*
+     * Stop slightly inside the normal pickup distance.
+     *
+     * updateFootballPossession() will award possession
+     * when Blue reaches this distance.
+     */
+    const stoppingDistance =
+        Math.max(
+            4,
+            this.ballPickupDistance - 4
+        );
+
+    if (
+        distanceToFootball >
+        stoppingDistance
+    ) {
+        directionToFootball.normalize();
+
+        /*
+         * Blue moves slightly faster when contesting
+         * a loose football than during normal support.
+         */
+        const looseBallChaseSpeed = 155;
+
+        const maximumMovement =
+            looseBallChaseSpeed *
+            (delta / 1000);
+
+        const movementDistance =
+            Math.min(
+                maximumMovement,
+                distanceToFootball -
+                    stoppingDistance
+            );
+
+        this.supportPlayer.x +=
+            directionToFootball.x *
+            movementDistance;
+
+        this.supportPlayer.y +=
+            directionToFootball.y *
+            movementDistance;
+    }
+
+    this.keepObjectInsideField(
+        this.supportPlayer
+    );
+
+    return;
+}
+
     /*
      * The supporting player tries to remain ahead of
      * the currently controlled player.
