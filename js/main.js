@@ -655,11 +655,21 @@ this.tackleDistance = 26;
 this.isTackleActive = false;
 
 /*
- * Players remain locked together briefly once a tackle
- * begins.
+ * Players remain engaged briefly once a tackle begins.
  */
 this.tackleTimer = 0;
 this.tackleDuration = 350;
+
+/*
+ * The ball carrier can continue driving their legs,
+ * but movement is heavily reduced during the tackle.
+ */
+this.tackleMovementMultiplier = 0.28;
+
+/*
+ * Store the defender currently involved in the tackle.
+ */
+this.activeTackler = null;
 
 /*
  * Prevent the player from immediately marking the
@@ -1620,8 +1630,25 @@ if (this.playerIsMoving) {
     direction.normalize();
 }
 
-    const moveDistance =
-        this.playerSpeed * (delta / 1000);
+/*
+ * The controlled player moves much more slowly when
+ * carrying the football during an active tackle.
+ */
+let movementSpeedMultiplier = 1;
+
+if (
+    this.isTackleActive &&
+    this.possessionOwner ===
+        this.controlledPlayer
+) {
+    movementSpeedMultiplier =
+        this.tackleMovementMultiplier;
+}
+
+const moveDistance =
+    this.playerSpeed *
+    movementSpeedMultiplier *
+    (delta / 1000);
 
 const previousPlayerX =
     this.controlledPlayer.x;
@@ -3604,6 +3631,7 @@ updateTackleDetection(delta) {
 if (!this.possessionOwner) {
     this.isTackleActive = false;
     this.tackleTimer = 0;
+    this.activeTackler = null;
     return;
 }
 
@@ -3624,10 +3652,12 @@ if (!this.possessionOwner) {
         defender = this.opponent;
     }
 
-    if (!defender) {
-        this.isTackleActive = false;
-        return;
-    }
+if (!defender) {
+    this.isTackleActive = false;
+    this.tackleTimer = 0;
+    this.activeTackler = null;
+    return;
+}
 
     const tackleDistance =
         Phaser.Math.Distance.Between(
@@ -3638,43 +3668,94 @@ if (!this.possessionOwner) {
         );
 
 if (
-    tackleDistance <= this.tackleDistance
+    tackleDistance <= this.tackleDistance ||
+    (
+        this.isTackleActive &&
+        defender === this.activeTackler
+    )
 ) {
-
+    /*
+     * Begin a new tackle.
+     */
     if (!this.isTackleActive) {
-
         this.isTackleActive = true;
-        this.tackleTimer = this.tackleDuration;
+        this.tackleTimer =
+            this.tackleDuration;
+
+        this.activeTackler =
+            defender;
 
         console.log("Tackle started.");
     }
 
+    /*
+     * Continue the active tackle.
+     */
     if (this.tackleTimer > 0) {
-
         this.tackleTimer -= delta;
 
         /*
-         * Keep both players together while the tackle
-         * is active.
+         * Instead of forcing both players onto the exact
+         * same position, place the defender slightly
+         * behind the ball carrier.
          */
-        const midpointX =
-            (defender.x + this.possessionOwner.x) / 2;
+        const directionToCarrier =
+            new Phaser.Math.Vector2(
+                this.possessionOwner.x -
+                    defender.x,
 
-        const midpointY =
-            (defender.y + this.possessionOwner.y) / 2;
+                this.possessionOwner.y -
+                    defender.y
+            );
 
-        defender.x = midpointX;
-        defender.y = midpointY;
+        if (
+            directionToCarrier.length() > 0
+        ) {
+            directionToCarrier.normalize();
+        }
 
-        this.possessionOwner.x = midpointX;
-        this.possessionOwner.y = midpointY;
+        /*
+         * Keep a small visual gap so both players remain
+         * visible during the tackle.
+         */
+        const tackleAttachmentDistance = 12;
+
+        defender.x =
+            this.possessionOwner.x -
+            directionToCarrier.x *
+                tackleAttachmentDistance;
+
+        defender.y =
+            this.possessionOwner.y -
+            directionToCarrier.y *
+                tackleAttachmentDistance;
+
+        this.keepObjectInsideField(
+            defender
+        );
+
+        return;
     }
+
+    /*
+     * The engagement timer has ended.
+     *
+     * Step 15D will determine the actual outcome.
+     */
+    this.isTackleActive = false;
+    this.tackleTimer = 0;
+    this.activeTackler = null;
+
+    console.log(
+        "Tackle engagement ended."
+    );
 
     return;
 }
     else {
-   this.isTackleActive = false;
+this.isTackleActive = false;
 this.tackleTimer = 0;
+this.activeTackler = null;
     }
 }
 
