@@ -3070,8 +3070,86 @@ updateFootballMarking() {
             secondCandidate.distance
     );
 
+    const closestCandidate =
+        successfulCandidates[0];
+
+    const secondCandidate =
+        successfulCandidates[1];
+
+    /*
+     * A spoil can only occur when two players reach
+     * the football at almost the same time.
+     */
+    if (secondCandidate) {
+        const closestIsOpponent =
+            closestCandidate.player ===
+            this.opponent;
+
+        const secondIsOpponent =
+            secondCandidate.player ===
+            this.opponent;
+
+        const playersAreOpponents =
+            closestIsOpponent !==
+            secondIsOpponent;
+
+        const contestDistanceDifference =
+            Math.abs(
+                closestCandidate.distance -
+                secondCandidate.distance
+            );
+
+        const spoilContestMargin = 18;
+
+        if (
+            playersAreOpponents &&
+            contestDistanceDifference <=
+                spoilContestMargin
+        ) {
+            /*
+             * Change the flight type so this disposal
+             * cannot immediately be marked again.
+             */
+            this.footballFlightType =
+                "SPOIL";
+
+            this.footballCanBeMarked =
+                false;
+
+            /*
+             * Reduce the forward speed and knock the
+             * football sideways away from the contest.
+             */
+            this.footballVelocityX *=
+                0.45;
+
+            const spoilDirection =
+                this.opponent.y <=
+                this.football.y
+                    ? 1
+                    : -1;
+
+            this.footballVelocityY =
+                spoilDirection * 180;
+
+            this.footballRotationSpeed =
+                spoilDirection * 720;
+
+            this.football.setStrokeStyle(
+                2,
+                0xffffff
+            );
+
+            console.log(
+                "The marking contest was spoiled."
+            );
+
+            return;
+        }
+    }
+
     this.completePlayerMark(
-        successfulCandidates[0].player
+        closestCandidate.player
     );
 }
 
