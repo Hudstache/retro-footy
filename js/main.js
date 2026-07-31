@@ -645,6 +645,16 @@ this.footballBaseScaleY = 1;
 this.playerMarkDistance = 30;
 
 /*
+ * Tackling system.
+ */
+this.tackleDistance = 26;
+
+/*
+ * Prevent tackle messages from repeating every frame.
+ */
+this.isTackleActive = false;
+
+/*
  * Prevent the player from immediately marking the
  * football as it leaves their boot.
  */
@@ -1638,6 +1648,7 @@ this.updateFootballFlight(delta);
 this.updateFootballMarking();
 this.updateFootballGroundPhysics(delta);
 this.updateFootballPossession(delta);
+this.updateTackleDetection();
 this.keepFootballInsideField();
 
 /*
@@ -3576,6 +3587,59 @@ this.footballFlightType = null;
         2,
         0xffffff
     );
+}
+
+updateTackleDetection() {
+    /*
+     * A tackle can only occur while somebody has
+     * possession of the football.
+     */
+    if (!this.possessionOwner) {
+        this.isTackleActive = false;
+        return;
+    }
+
+    let defender = null;
+
+    /*
+     * If Green has possession, the controlled home
+     * player becomes the tackler.
+     */
+    if (this.hasAwayPossession()) {
+        defender = this.controlledPlayer;
+    }
+    /*
+     * If a home player has possession, Green becomes
+     * the tackler.
+     */
+    else if (this.hasHomePossession()) {
+        defender = this.opponent;
+    }
+
+    if (!defender) {
+        this.isTackleActive = false;
+        return;
+    }
+
+    const tackleDistance =
+        Phaser.Math.Distance.Between(
+            defender.x,
+            defender.y,
+            this.possessionOwner.x,
+            this.possessionOwner.y
+        );
+
+    if (
+        tackleDistance <= this.tackleDistance
+    ) {
+        if (!this.isTackleActive) {
+            this.isTackleActive = true;
+
+            console.log("Tackle started.");
+        }
+    } else {
+        this.isTackleActive = false;
+    }
 }
 
 takeFootballPossession(
