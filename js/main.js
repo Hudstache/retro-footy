@@ -2061,15 +2061,161 @@ const pressureDistance = 55;
     }
 
 /*
- * While the football is airborne, Green holds his
- * current position.
- *
- * The marking system determines whether he is close
- * enough to take a mark.
+ * While a kick is airborne, Green predicts where the
+ * football is travelling and moves toward a possible
+ * interception point.
  */
 if (this.footballInFlight) {
     this.opponentData.state =
-        "TRACK_FLIGHT";
+        "INTERCEPT_FLIGHT";
+
+    /*
+     * Handballs are too short and fast for Green to
+     * predictively intercept at this stage.
+     *
+     * Green will hold position until a handball lands.
+     */
+    if (
+        this.footballFlightType !==
+        "KICK"
+    ) {
+        this.keepObjectInsideField(
+            this.opponent
+        );
+
+        return;
+    }
+
+    const footballVelocity =
+        new Phaser.Math.Vector2(
+            this.footballVelocityX,
+            this.footballVelocityY
+        );
+
+    const footballSpeed =
+        footballVelocity.length();
+
+    /*
+     * Estimate how much farther the football will travel.
+     *
+     * Kicks currently use an exponential drag value of
+     * 1.25 inside updateFootballFlight().
+     */
+    const kickDragPerSecond = 1.25;
+
+    const estimatedRemainingDistance =
+        footballSpeed /
+        kickDragPerSecond;
+
+    /*
+     * Prevent Green from predicting an interception
+     * point too far away.
+     *
+     * This keeps his movement readable and prevents him
+     * from sprinting across the entire field.
+     */
+    const maximumPredictionDistance = 180;
+
+    const predictionDistance =
+        Phaser.Math.Clamp(
+            estimatedRemainingDistance,
+            35,
+            maximumPredictionDistance
+        );
+
+    if (footballSpeed > 0) {
+        footballVelocity.normalize();
+    }
+
+    let interceptionX =
+        this.football.x +
+        footballVelocity.x *
+        predictionDistance;
+
+    let interceptionY =
+        this.football.y +
+        footballVelocity.y *
+        predictionDistance;
+
+    /*
+     * Keep the predicted interception point inside the
+     * playable oval.
+     */
+    const correctedInterceptionPoint =
+        this.getPointInsideField(
+            interceptionX,
+            interceptionY
+        );
+
+    interceptionX =
+        correctedInterceptionPoint.x;
+
+    interceptionY =
+        correctedInterceptionPoint.y;
+
+    this.opponentData.targetX =
+        interceptionX;
+
+    this.opponentData.targetY =
+        interceptionY;
+
+    const directionToInterception =
+        new Phaser.Math.Vector2(
+            interceptionX -
+                this.opponent.x,
+
+            interceptionY -
+                this.opponent.y
+        );
+
+    const distanceToInterception =
+        directionToInterception.length();
+
+    /*
+     * Green does not need to stand on the exact predicted
+     * point. The existing marking distance will determine
+     * whether he is close enough to mark the football.
+     */
+    const interceptionStoppingDistance =
+        8;
+
+    if (
+        distanceToInterception <=
+        interceptionStoppingDistance
+    ) {
+        this.keepObjectInsideField(
+            this.opponent
+        );
+
+        return;
+    }
+
+    directionToInterception.normalize();
+
+    /*
+     * Green moves faster when reading an airborne kick
+     * than during normal defensive positioning.
+     */
+    const interceptionSpeed = 150;
+
+    const maximumMovement =
+        interceptionSpeed *
+        deltaSeconds;
+
+    const movementDistance =
+        Math.min(
+            maximumMovement,
+            distanceToInterception -
+                interceptionStoppingDistance
+        );
+
+    this.opponent.x +=
+        directionToInterception.x *
+        movementDistance;
+
+    this.opponent.y +=
+        directionToInterception.y *
+        movementDistance;
 
     this.keepObjectInsideField(
         this.opponent
