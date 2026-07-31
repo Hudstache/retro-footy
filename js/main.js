@@ -3021,10 +3021,6 @@ updateFootballMarking() {
         return;
     }
 
-    /*
-     * Check every player who can currently contest the
-     * kick.
-     */
     const markingCandidates = [
         this.controlledPlayer,
         this.supportPlayer,
@@ -3068,10 +3064,6 @@ updateFootballMarking() {
         return;
     }
 
-    /*
-     * If multiple players reach the ball during the same
-     * frame, the closest player wins the mark.
-     */
     successfulCandidates.sort(
         (firstCandidate, secondCandidate) =>
             firstCandidate.distance -
