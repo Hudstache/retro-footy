@@ -2114,7 +2114,7 @@ if (this.footballInFlight) {
      * This keeps his movement readable and prevents him
      * from sprinting across the entire field.
      */
-    const maximumPredictionDistance = 180;
+    const maximumPredictionDistance = 160;
 
     const predictionDistance =
         Phaser.Math.Clamp(
@@ -2196,7 +2196,7 @@ if (this.footballInFlight) {
      * Green moves faster when reading an airborne kick
      * than during normal defensive positioning.
      */
-    const interceptionSpeed = 150;
+    const interceptionSpeed = 140;
 
     const maximumMovement =
         interceptionSpeed *
@@ -3099,7 +3099,7 @@ updateFootballMarking() {
                 secondCandidate.distance
             );
 
-        const spoilContestMargin = 18;
+        const spoilContestMargin = 22;
 
         if (
             playersAreOpponents &&
