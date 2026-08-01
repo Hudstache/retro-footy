@@ -1440,6 +1440,13 @@ if (
  * A legal disposal during a tackle ends the tackle
  * before the football leaves the player.
  */
+/*
+ * Record whether pressure was active before clearing
+ * the tackle.
+ */
+const disposalWasPressured =
+    this.isTackleActive;
+
 if (this.isTackleActive) {
     this.isTackleActive = false;
     this.tackleTimer = 0;
@@ -1527,12 +1534,34 @@ this.footballCanBeMarked = false;
      * Drag down = football travels up.
      * Drag up   = football travels down.
      */
-    const verticalDirection =
+let verticalDirection =
+    Phaser.Math.Clamp(
+        -verticalDrag / 100,
+        -1,
+        1
+    );
+
+/*
+ * Disposals made during a tackle receive a small
+ * random accuracy penalty.
+ */
+if (this.isTackleActive) {
+    const maximumPressureError =
+        isKick ? 0.32 : 0.22;
+
+    verticalDirection +=
+        Phaser.Math.FloatBetween(
+            -maximumPressureError,
+            maximumPressureError
+        );
+
+    verticalDirection =
         Phaser.Math.Clamp(
-            -verticalDrag / 100,
+            verticalDirection,
             -1,
             1
         );
+}
 
     const direction =
         new Phaser.Math.Vector2(
