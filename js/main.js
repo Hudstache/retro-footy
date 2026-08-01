@@ -3625,39 +3625,30 @@ this.footballFlightType = null;
 
 updateTackleDetection(delta) {
     /*
-     * A tackle can only occur while somebody has
-     * possession of the football.
+     * Tackling only occurs while a player owns
+     * the football.
      */
-if (!this.possessionOwner) {
-    this.isTackleActive = false;
-    this.tackleTimer = 0;
-    this.activeTackler = null;
-    return;
-}
+    if (!this.possessionOwner) {
+        this.isTackleActive = false;
+        this.tackleTimer = 0;
+        this.activeTackler = null;
+        return;
+    }
 
     let defender = null;
 
-    /*
-     * If Green has possession, the controlled home
-     * player becomes the tackler.
-     */
     if (this.hasAwayPossession()) {
         defender = this.controlledPlayer;
-    }
-    /*
-     * If a home player has possession, Green becomes
-     * the tackler.
-     */
-    else if (this.hasHomePossession()) {
+    } else if (this.hasHomePossession()) {
         defender = this.opponent;
     }
 
-if (!defender) {
-    this.isTackleActive = false;
-    this.tackleTimer = 0;
-    this.activeTackler = null;
-    return;
-}
+    if (!defender) {
+        this.isTackleActive = false;
+        this.tackleTimer = 0;
+        this.activeTackler = null;
+        return;
+    }
 
     const tackleDistance =
         Phaser.Math.Distance.Between(
@@ -3667,96 +3658,176 @@ if (!defender) {
             this.possessionOwner.y
         );
 
-if (
-    tackleDistance <= this.tackleDistance ||
-    (
-        this.isTackleActive &&
-        defender === this.activeTackler
-    )
-) {
-    /*
-     * Begin a new tackle.
-     */
-    if (!this.isTackleActive) {
-        this.isTackleActive = true;
-        this.tackleTimer =
-            this.tackleDuration;
-
-        this.activeTackler =
-            defender;
-
-        console.log("Tackle started.");
-    }
-
-    /*
-     * Continue the active tackle.
-     */
-    if (this.tackleTimer > 0) {
-        this.tackleTimer -= delta;
-
-        /*
-         * Instead of forcing both players onto the exact
-         * same position, place the defender slightly
-         * behind the ball carrier.
-         */
-        const directionToCarrier =
-            new Phaser.Math.Vector2(
-                this.possessionOwner.x -
-                    defender.x,
-
-                this.possessionOwner.y -
-                    defender.y
-            );
-
-        if (
-            directionToCarrier.length() > 0
-        ) {
-            directionToCarrier.normalize();
-        }
-
-        /*
-         * Keep a small visual gap so both players remain
-         * visible during the tackle.
-         */
-        const tackleAttachmentDistance = 12;
-
-        defender.x =
-            this.possessionOwner.x -
-            directionToCarrier.x *
-                tackleAttachmentDistance;
-
-        defender.y =
-            this.possessionOwner.y -
-            directionToCarrier.y *
-                tackleAttachmentDistance;
-
-        this.keepObjectInsideField(
-            defender
+    const tackleCanContinue =
+        tackleDistance <=
+            this.tackleDistance ||
+        (
+            this.isTackleActive &&
+            defender === this.activeTackler
         );
 
+    if (!tackleCanContinue) {
+        this.isTackleActive = false;
+        this.tackleTimer = 0;
+        this.activeTackler = null;
         return;
     }
 
     /*
-     * The engagement timer has ended.
-     *
-     * Step 15D will determine the actual outcome.
+     * Start a new tackle.
      */
+if (!this.isTackleActive) {
+    this.isTackleActive = true;
+    this.activeTackler =
+        defender;
+
+    console.log("Tackle started.");
+
+    /*
+     * Complete the tackle after the engagement
+     * duration has passed.
+     */
+    this.time.delayedCall(
+        this.tackleDuration,
+        () => {
+            this.completeTackleSpill();
+        }
+    );
+}
+
+    /*
+     * Continue the tackle until the timer expires.
+     */
+    /*
+ * Keep the tackler attached while the delayed
+ * completion timer is active.
+ */
+if (
+    this.isTackleActive &&
+    this.possessionOwner
+) {
+    const directionToCarrier =
+        new Phaser.Math.Vector2(
+            this.possessionOwner.x -
+                defender.x,
+
+            this.possessionOwner.y -
+                defender.y
+        );
+
+    if (directionToCarrier.length() > 0) {
+        directionToCarrier.normalize();
+    }
+
+    const tackleAttachmentDistance = 12;
+
+    defender.x =
+        this.possessionOwner.x -
+        directionToCarrier.x *
+            tackleAttachmentDistance;
+
+    defender.y =
+        this.possessionOwner.y -
+        directionToCarrier.y *
+            tackleAttachmentDistance;
+
+    this.keepObjectInsideField(
+        defender
+    );
+}
+
+return;
+
+}
+
+completeTackleSpill() {
+    /*
+     * Cancel when possession changed before the tackle
+     * completion event fired.
+     */
+    if (
+        !this.isTackleActive ||
+        !this.possessionOwner
+    ) {
+        this.isTackleActive = false;
+        this.activeTackler = null;
+        return;
+    }
+
+    const ballCarrier =
+        this.possessionOwner;
+
+    const spillDirection =
+        this.hasAwayPossession()
+            ? -1
+            : 1;
+
+    this.clearPossession();
+
+    /*
+     * Prevent an immediate recollection.
+     */
+    this.footballPickupLockTimer = 450;
+
+    /*
+     * Place the football clearly outside the normal
+     * 24-pixel collection distance.
+     */
+    this.football.x =
+        ballCarrier.x +
+        spillDirection * 40;
+
+    this.football.y =
+        ballCarrier.y +
+        Phaser.Math.Between(
+            -14,
+            14
+        );
+
+    /*
+     * Start the ground-bounce system directly.
+     */
+    this.footballInFlight = false;
+    this.footballFlightType =
+        "TACKLE_SPILL";
+
+    this.footballGroundState =
+        "BOUNCING";
+
+    this.footballBounceCount = 0;
+    this.footballGroundBounceTimer = 0;
+    this.footballGroundBounceDuration = 220;
+    this.footballBounceHeight = 0.2;
+
+    this.footballVelocityX =
+        spillDirection * 125;
+
+    this.footballVelocityY =
+        Phaser.Math.Between(
+            -55,
+            55
+        );
+
+    this.footballRotationSpeed =
+        spillDirection * 540;
+
+    this.football.setScale(
+        this.footballBaseScaleX,
+        this.footballBaseScaleY
+    );
+
+    this.football.setStrokeStyle(
+        2,
+        0xffffff
+    );
+
     this.isTackleActive = false;
     this.tackleTimer = 0;
     this.activeTackler = null;
 
     console.log(
-        "Tackle engagement ended."
+        "Ball spilled from tackle."
     );
-
-    return;
-}
-    else {
-this.isTackleActive = false;
-this.tackleTimer = 0;
-this.activeTackler = null;
-    }
 }
 
 takeFootballPossession(
