@@ -179,7 +179,20 @@ createPlayer() {
         0xffffff
     );
 
-    this.playerSpeed = 170;
+this.playerSpeed = 170;
+
+/*
+ * Smooth movement settings.
+ */
+this.playerAcceleration = 620;
+this.playerDeceleration = 760;
+
+/*
+ * Each home player stores their own movement velocity
+ * because control can switch between Red and Blue.
+ */
+this.player.movementVelocityX = 0;
+this.player.movementVelocityY = 0;
 
     this.moveLeft = false;
     this.moveRight = false;
@@ -201,14 +214,17 @@ this.teammate = this.add.rectangle(
         0xffffff
     );
 
-    this.teammateData = {
-        team: "home",
-        state: "SUPPORT",
-        speed: 145,
-        targetX: this.teammate.x,
-        targetY: this.teammate.y,
-        hasBall: false
-    };
+this.teammateData = {
+    team: "home",
+    state: "SUPPORT",
+    speed: 145,
+    targetX: this.teammate.x,
+    targetY: this.teammate.y,
+    hasBall: false
+};
+
+this.teammate.movementVelocityX = 0;
+this.teammate.movementVelocityY = 0;
 }
 
 createControlledPlayerIndicator() {
@@ -276,12 +292,27 @@ switchControlledPlayer(newControlledPlayer) {
      * The previously controlled player becomes the new
      * supporting AI player.
      */
-    this.controlledPlayer =
-        newControlledPlayer;
+/*
+ * Stop leftover movement from transferring between
+ * controlled players.
+ */
+previousControlledPlayer
+    .movementVelocityX = 0;
 
-    this.supportPlayer =
-        previousControlledPlayer;
+previousControlledPlayer
+    .movementVelocityY = 0;
 
+newControlledPlayer
+    .movementVelocityX = 0;
+
+newControlledPlayer
+    .movementVelocityY = 0;
+
+this.controlledPlayer =
+    newControlledPlayer;
+
+this.supportPlayer =
+    previousControlledPlayer;
     /*
      * Cancel any movement or disposal input that may
      * still belong to the previous player.
@@ -1203,6 +1234,28 @@ isPointerInsideJoystick(pointer) {
     );
 }
 
+moveValueTowards(
+    currentValue,
+    targetValue,
+    maximumChange
+) {
+    if (
+        Math.abs(
+            targetValue - currentValue
+        ) <= maximumChange
+    ) {
+        return targetValue;
+    }
+
+    return (
+        currentValue +
+        Math.sign(
+            targetValue - currentValue
+        ) *
+        maximumChange
+    );
+}
+
 resetTouchMovement() {
     this.moveLeft = false;
     this.moveRight = false;
@@ -1723,25 +1776,22 @@ if (this.possessionOwner) {
         verticalDirection += 1;
     }
 
-const direction = new Phaser.Math.Vector2(
-    horizontalDirection,
-    verticalDirection
-);
+const inputDirection =
+    new Phaser.Math.Vector2(
+        horizontalDirection,
+        verticalDirection
+    );
 
-/*
- * Record whether the controlled player is currently
- * moving before normalising the direction.
- */
-this.playerIsMoving =
-    direction.length() > 0;
+const playerHasMovementInput =
+    inputDirection.length() > 0;
 
-if (this.playerIsMoving) {
-    direction.normalize();
+if (playerHasMovementInput) {
+    inputDirection.normalize();
 }
 
 /*
- * The controlled player moves much more slowly when
- * carrying the football during an active tackle.
+ * Tackled ball carriers retain the existing movement
+ * reduction from Step 15C.
  */
 let movementSpeedMultiplier = 1;
 
@@ -1754,10 +1804,67 @@ if (
         this.tackleMovementMultiplier;
 }
 
-const moveDistance =
+const targetSpeed =
     this.playerSpeed *
-    movementSpeedMultiplier *
-    (delta / 1000);
+    movementSpeedMultiplier;
+
+const targetVelocityX =
+    inputDirection.x *
+    targetSpeed;
+
+const targetVelocityY =
+    inputDirection.y *
+    targetSpeed;
+
+const deltaSeconds =
+    delta / 1000;
+
+/*
+ * Use acceleration while movement input exists.
+ * Use stronger deceleration when the controls are released.
+ */
+const velocityChangeRate =
+    playerHasMovementInput
+        ? this.playerAcceleration
+        : this.playerDeceleration;
+
+const maximumVelocityChange =
+    velocityChangeRate *
+    deltaSeconds;
+
+this.controlledPlayer.movementVelocityX =
+    this.moveValueTowards(
+        this.controlledPlayer
+            .movementVelocityX,
+
+        targetVelocityX,
+        maximumVelocityChange
+    );
+
+this.controlledPlayer.movementVelocityY =
+    this.moveValueTowards(
+        this.controlledPlayer
+            .movementVelocityY,
+
+        targetVelocityY,
+        maximumVelocityChange
+    );
+
+/*
+ * The player counts as moving whenever they still have
+ * meaningful momentum, even after input is released.
+ */
+const currentMovementSpeed =
+    Math.sqrt(
+        this.controlledPlayer
+            .movementVelocityX ** 2 +
+
+        this.controlledPlayer
+            .movementVelocityY ** 2
+    );
+
+this.playerIsMoving =
+    currentMovementSpeed > 5;
 
 const previousPlayerX =
     this.controlledPlayer.x;
@@ -1766,10 +1873,14 @@ const previousPlayerY =
     this.controlledPlayer.y;
 
 this.controlledPlayer.x +=
-    direction.x * moveDistance;
+    this.controlledPlayer
+        .movementVelocityX *
+    deltaSeconds;
 
 this.controlledPlayer.y +=
-    direction.y * moveDistance;
+    this.controlledPlayer
+        .movementVelocityY *
+    deltaSeconds;
 
 const actualDistanceMoved =
     Phaser.Math.Distance.Between(
