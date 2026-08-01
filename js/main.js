@@ -3751,7 +3751,64 @@ if (!this.isTackleActive) {
     this.activeTackler =
         defender;
 
-    console.log("Tackle started.");
+/*
+ * Give immediate visual feedback when a tackle
+ * begins.
+ */
+this.tweens.add({
+    targets: [
+        defender,
+        this.possessionOwner
+    ],
+
+    scaleX: 1.20,
+    scaleY: 1.20,
+
+    duration: 80,
+    yoyo: true,
+
+    ease: "Power1"
+});
+
+/*
+ * Briefly flash both players.
+ */
+const defenderOriginalColour =
+    defender.fillColor;
+
+const carrierOriginalColour =
+    this.possessionOwner.fillColor;
+
+defender.setFillStyle(
+    0xffffff
+);
+
+this.possessionOwner.setFillStyle(
+    0xffffff
+);
+
+this.time.delayedCall(
+    100,
+    () => {
+
+        defender.setFillStyle(
+            defenderOriginalColour
+        );
+
+        if (this.possessionOwner) {
+
+            this.possessionOwner.setFillStyle(
+                carrierOriginalColour
+            );
+
+        }
+
+    }
+);
+
+console.log(
+    "Tackle started."
+);
 
     /*
      * Complete the tackle after the engagement
