@@ -760,6 +760,14 @@ this.footballCanBeMarked = false;
 this.scoreDetected = false;
 this.lastScoreResult = null;
 
+/*
+ * Match scoring.
+ */
+this.homeGoals = 0;
+this.homeBehinds = 0;
+this.awayGoals = 0;
+this.awayBehinds = 0;
+
     // Drag aiming
     this.isAimingPass = false;
     this.aimPointerId = null;
@@ -3294,6 +3302,34 @@ if (currentSpeed <= stoppingSpeed) {
 }
 }
 
+updateScoreboard() {
+    if (
+        this.lastScoreResult === "GOAL"
+    ) {
+        this.homeGoals++;
+    } else if (
+        this.lastScoreResult === "BEHIND"
+    ) {
+        this.homeBehinds++;
+    }
+
+    const homeTotal =
+        this.homeGoals * 6 +
+        this.homeBehinds;
+
+    const awayTotal =
+        this.awayGoals * 6 +
+        this.awayBehinds;
+
+    this.homeScoreText.setText(
+        `${this.homeGoals}.${this.homeBehinds} (${homeTotal})`
+    );
+
+    this.awayScoreText.setText(
+        `${this.awayGoals}.${this.awayBehinds} (${awayTotal})`
+    );
+}
+
 updateScoreDetection(
     previousFootballX
 ) {
@@ -3356,6 +3392,11 @@ updateScoreDetection(
     this.lastScoreResult =
         scoreResult;
 
+        /*
+ * Update the scoreboard immediately.
+ */
+this.updateScoreboard();
+
     /*
      * Stop the football on the scoring line.
      *
@@ -3374,9 +3415,13 @@ updateScoreDetection(
 this.time.delayedCall(
     1500,
     () => {
+
         if (this.passTypeText) {
             this.passTypeText.setText("");
         }
+
+        this.restartAfterScore();
+
     }
 );
 
@@ -3403,6 +3448,66 @@ if (scoreResult === "GOAL") {
         "The shot missed the scoring posts."
     );
 }
+}
+
+restartAfterScore() {
+
+    /*
+     * Reset score detection.
+     */
+    this.scoreDetected = false;
+    this.lastScoreResult = null;
+
+    /*
+     * Return the football to the centre.
+     */
+    this.clearPossession();
+
+    this.football.x =
+        this.field.centreX;
+
+    this.football.y =
+        this.field.centreY;
+
+    this.stopFootballFlight();
+
+    /*
+     * Return players to their current prototype
+     * starting positions.
+     *
+     * Phase 16 will replace these with formations.
+     */
+    this.player.setPosition(
+        this.field.centreX - 120,
+        this.field.centreY
+    );
+
+    this.teammate.setPosition(
+        this.field.centreX - 40,
+        this.field.centreY + 80
+    );
+
+    this.opponent.setPosition(
+        this.field.centreX + 120,
+        this.field.centreY
+    );
+
+    /*
+     * Red becomes the controlled player after every
+     * restart.
+     */
+    if (
+        this.controlledPlayer !==
+        this.player
+    ) {
+        this.switchControlledPlayer(
+            this.player
+        );
+    }
+
+    console.log(
+        "Centre restart."
+    );
 }
 
 updateFootballMarking() {
@@ -4858,10 +4963,10 @@ createScoreboard() {
         }
     );
 
-    const homeScoreText = this.add.text(
-        -225,
-        -12,
-        "0.0.0",
+this.homeScoreText = this.add.text(
+    -225,
+    -12,
+    "0.0 (0)",
         {
             fontFamily: "Courier New",
             fontSize: "15px",
@@ -4883,10 +4988,10 @@ createScoreboard() {
         0
     );
 
-    const awayScoreText = this.add.text(
-        225,
-        -12,
-        "0.0.0",
+this.awayScoreText = this.add.text(
+    225,
+    -12,
+    "0.0 (0)",
         {
             fontFamily: "Courier New",
             fontSize: "15px",
@@ -4917,9 +5022,9 @@ createScoreboard() {
         centrePanel,
         awayPanel,
         homeNameText,
-        homeScoreText,
-        quarterText,
-        awayScoreText,
+this.homeScoreText,
+quarterText,
+this.awayScoreText,
         awayNameText
     ]);
 
