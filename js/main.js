@@ -1436,6 +1436,20 @@ if (
     return;
 }
 
+/*
+ * A legal disposal during a tackle ends the tackle
+ * before the football leaves the player.
+ */
+if (this.isTackleActive) {
+    this.isTackleActive = false;
+    this.tackleTimer = 0;
+    this.activeTackler = null;
+
+    console.log(
+        "Legal disposal completed during tackle."
+    );
+}
+
     /*
      * Transfer possession from the player to the
      * travelling football.
@@ -3768,18 +3782,20 @@ return;
 }
 
 completeTackleSpill() {
-    /*
-     * Cancel when possession changed before the tackle
-     * completion event fired.
-     */
-    if (
-        !this.isTackleActive ||
-        !this.possessionOwner
-    ) {
-        this.isTackleActive = false;
-        this.activeTackler = null;
-        return;
-    }
+/*
+ * Cancel the tackle outcome if the carrier disposed
+ * of the football before the tackle completed.
+ */
+if (
+    !this.isTackleActive ||
+    !this.possessionOwner
+) {
+    this.isTackleActive = false;
+    this.tackleTimer = 0;
+    this.activeTackler = null;
+
+    return;
+}
 
 const ballCarrier =
     this.possessionOwner;
