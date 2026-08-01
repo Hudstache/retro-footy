@@ -329,7 +329,8 @@ clearPossession() {
     /*
      * Remove possession from every player.
      */
-    this.possessionOwner = null;
+this.possessionOwner = null;
+this.possessionTimer = 0;
 
     this.playerHasBall = false;
 
@@ -371,8 +372,14 @@ setPossessionOwner(newOwner) {
      */
     this.stopFootballFlight();
 
-    this.possessionOwner =
-        newOwner;
+this.possessionOwner =
+    newOwner;
+
+/*
+ * Begin a fresh possession timer whenever ownership
+ * changes.
+ */
+this.possessionTimer = 0;
 
     this.playerHasBall =
         ownerIsHomePlayer;
@@ -670,6 +677,18 @@ this.tackleMovementMultiplier = 0.28;
  * Store the defender currently involved in the tackle.
  */
 this.activeTackler = null;
+
+/*
+ * Track how long the current player has possessed
+ * the football.
+ */
+this.possessionTimer = 0;
+
+/*
+ * Possession longer than this counts as prior
+ * opportunity during future tackle decisions.
+ */
+this.priorOpportunityDuration = 1200;
 
 /*
  * Prevent the player from immediately marking the
@@ -1577,6 +1596,14 @@ this.footballRotationSpeed =
 update(time, delta) {
 if (!this.controlledPlayer) {
     return;
+}
+
+/*
+ * Count how long the current ball carrier has held
+ * possession.
+ */
+if (this.possessionOwner) {
+    this.possessionTimer += delta;
 }
 
     let horizontalDirection = 0;
@@ -3754,8 +3781,18 @@ completeTackleSpill() {
         return;
     }
 
-    const ballCarrier =
-        this.possessionOwner;
+const ballCarrier =
+    this.possessionOwner;
+
+const hadPriorOpportunity =
+    this.possessionTimer >=
+    this.priorOpportunityDuration;
+
+console.log(
+    hadPriorOpportunity
+        ? "Tackle completed with prior opportunity."
+        : "Tackle completed without prior opportunity."
+);
 
     const spillDirection =
         this.hasAwayPossession()
