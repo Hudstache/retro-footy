@@ -754,6 +754,12 @@ this.minimumMarkDistance =
  */
 this.footballCanBeMarked = false;
 
+/*
+ * Scoring detection.
+ */
+this.scoreDetected = false;
+this.lastScoreResult = null;
+
     // Drag aiming
     this.isAimingPass = false;
     this.aimPointerId = null;
@@ -1561,6 +1567,12 @@ this.footballPickupLockTimer =
         isKick ? "KICK" : "HANDBALL";
 
     this.footballFlightTime = 0;
+
+    /*
+ * Allow the new kick to register a score.
+ */
+this.scoreDetected = false;
+this.lastScoreResult = null;
 
     /*
  * Begin tracking the new disposal.
@@ -2867,6 +2879,14 @@ updateFootballPossession(delta) {
         return;
     }
 
+    /*
+ * Do not allow players to collect the football after
+ * a score has been detected.
+ */
+if (this.scoreDetected) {
+    return;
+}
+
     if (this.footballPickupLockTimer > 0) {
         this.footballPickupLockTimer =
             Math.max(
@@ -3121,6 +3141,14 @@ const previousFootballY =
         this.footballVelocityY *
         deltaSeconds;
 
+        this.updateScoreDetection(
+    previousFootballX
+);
+
+if (this.scoreDetected) {
+    return;
+}
+
         /*
  * Add this frame's movement to the total disposal
  * distance.
@@ -3264,6 +3292,92 @@ this.footballCanBeMarked =
 if (currentSpeed <= stoppingSpeed) {
     this.startFootballGroundBounce();
 }
+}
+
+updateScoreDetection(
+    previousFootballX
+) {
+    if (this.scoreDetected) {
+        return;
+    }
+
+    /*
+     * Only kicks can currently register scores.
+     */
+    if (
+        this.footballFlightType !==
+        "KICK"
+    ) {
+        return;
+    }
+
+    const {
+        centreY,
+        rightGoalLineX,
+        goalPostOffset,
+        behindPostOffset
+    } = this.field;
+
+    /*
+     * Detect the exact frame where the football crosses
+     * from inside the field to beyond the goal line.
+     */
+    const crossedRightGoalLine =
+        previousFootballX <
+            rightGoalLineX &&
+        this.football.x >=
+            rightGoalLineX;
+
+    if (!crossedRightGoalLine) {
+        return;
+    }
+
+    const distanceFromGoalCentre =
+        Math.abs(
+            this.football.y -
+            centreY
+        );
+
+    let scoreResult = "MISS";
+
+    if (
+        distanceFromGoalCentre <
+        goalPostOffset
+    ) {
+        scoreResult = "GOAL";
+    } else if (
+        distanceFromGoalCentre <
+        behindPostOffset
+    ) {
+        scoreResult = "BEHIND";
+    }
+
+    this.scoreDetected = true;
+    this.lastScoreResult =
+        scoreResult;
+
+    /*
+     * Stop the football on the scoring line.
+     *
+     * Step 15N will add the scoreboard update and
+     * restart sequence.
+     */
+    this.football.x =
+        rightGoalLineX;
+
+    this.stopFootballFlight();
+
+    if (scoreResult === "GOAL") {
+        console.log("GOAL!");
+    } else if (
+        scoreResult === "BEHIND"
+    ) {
+        console.log("BEHIND.");
+    } else {
+        console.log(
+            "The shot missed the scoring posts."
+        );
+    }
 }
 
 updateFootballMarking() {
@@ -4601,9 +4715,10 @@ const postThickness = 6;
         );
     });
 
-    this.field.leftGoalLineX = leftGoalLineX;
-    this.field.rightGoalLineX = rightGoalLineX;
-    this.field.goalPostOffset = goalPostOffset;
+this.field.leftGoalLineX = leftGoalLineX;
+this.field.rightGoalLineX = rightGoalLineX;
+this.field.goalPostOffset = goalPostOffset;
+this.field.behindPostOffset = behindPostOffset;
 }
 
    createInterchangeBenches() {
