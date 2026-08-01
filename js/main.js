@@ -3784,14 +3784,42 @@ completeTackleSpill() {
 const ballCarrier =
     this.possessionOwner;
 
+const successfulTackler =
+    this.activeTackler;
+
 const hadPriorOpportunity =
     this.possessionTimer >=
     this.priorOpportunityDuration;
 
+/*
+ * Reset the active tackle before resolving
+ * possession.
+ */
+this.isTackleActive = false;
+this.tackleTimer = 0;
+this.activeTackler = null;
+
+/*
+ * A carrier with prior opportunity is penalised
+ * holding the ball.
+ */
+if (
+    hadPriorOpportunity &&
+    successfulTackler
+) {
+    this.setPossessionOwner(
+        successfulTackler
+    );
+
+    console.log(
+        "Holding the ball. Free kick to the tackler."
+    );
+
+    return;
+}
+
 console.log(
-    hadPriorOpportunity
-        ? "Tackle completed with prior opportunity."
-        : "Tackle completed without prior opportunity."
+    "No prior opportunity. Ball spilled."
 );
 
     const spillDirection =
