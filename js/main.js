@@ -679,6 +679,14 @@ this.tackleMovementMultiplier = 0.28;
 this.activeTackler = null;
 
 /*
+ * Tacklers briefly recover after completing or
+ * cancelling a tackle.
+ */
+this.tackleFatigueTimer = 0;
+this.tackleFatigueDuration = 700;
+this.fatiguedTackler = null;
+
+/*
  * Track how long the current player has possessed
  * the football.
  */
@@ -1448,6 +1456,18 @@ const disposalWasPressured =
     this.isTackleActive;
 
 if (this.isTackleActive) {
+    /*
+     * The tackler still requires a brief recovery even
+     * when the carrier completes a legal disposal.
+     */
+    if (this.activeTackler) {
+        this.fatiguedTackler =
+            this.activeTackler;
+
+        this.tackleFatigueTimer =
+            this.tackleFatigueDuration;
+    }
+
     this.isTackleActive = false;
     this.tackleTimer = 0;
     this.activeTackler = null;
@@ -1639,6 +1659,25 @@ this.footballRotationSpeed =
 update(time, delta) {
 if (!this.controlledPlayer) {
     return;
+}
+
+/*
+ * Count down the current tackle-fatigue period.
+ */
+if (this.tackleFatigueTimer > 0) {
+    this.tackleFatigueTimer =
+        Math.max(
+            0,
+            this.tackleFatigueTimer - delta
+        );
+
+    if (this.tackleFatigueTimer === 0) {
+        this.fatiguedTackler = null;
+
+        console.log(
+            "Tackler recovered."
+        );
+    }
 }
 
 /*
@@ -3720,6 +3759,18 @@ updateTackleDetection(delta) {
         return;
     }
 
+    /*
+ * A fatigued defender cannot begin another tackle
+ * until their recovery timer finishes.
+ */
+if (
+    !this.isTackleActive &&
+    defender === this.fatiguedTackler &&
+    this.tackleFatigueTimer > 0
+) {
+    return;
+}
+
     const tackleDistance =
         Phaser.Math.Distance.Between(
             defender.x,
@@ -3888,6 +3939,17 @@ const ballCarrier =
 
 const successfulTackler =
     this.activeTackler;
+
+    /*
+ * Start the tackler's recovery period.
+ */
+if (successfulTackler) {
+    this.fatiguedTackler =
+        successfulTackler;
+
+    this.tackleFatigueTimer =
+        this.tackleFatigueDuration;
+}
 
 const hadPriorOpportunity =
     this.possessionTimer >=
