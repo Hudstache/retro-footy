@@ -3367,17 +3367,42 @@ updateScoreDetection(
 
     this.stopFootballFlight();
 
-    if (scoreResult === "GOAL") {
-        console.log("GOAL!");
-    } else if (
-        scoreResult === "BEHIND"
-    ) {
-        console.log("BEHIND.");
-    } else {
-        console.log(
-            "The shot missed the scoring posts."
-        );
+    /*
+ * Keep the result visible until the scoreboard and
+ * restart system is added in Step 15N.
+ */
+this.time.delayedCall(
+    1500,
+    () => {
+        if (this.passTypeText) {
+            this.passTypeText.setText("");
+        }
     }
+);
+
+if (scoreResult === "GOAL") {
+    this.passTypeText.setText(
+        "GOAL!"
+    );
+
+    console.log("GOAL!");
+} else if (
+    scoreResult === "BEHIND"
+) {
+    this.passTypeText.setText(
+        "BEHIND"
+    );
+
+    console.log("BEHIND.");
+} else {
+    this.passTypeText.setText(
+        "MISSED"
+    );
+
+    console.log(
+        "The shot missed the scoring posts."
+    );
+}
 }
 
 updateFootballMarking() {
