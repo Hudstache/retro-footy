@@ -878,6 +878,23 @@ this.awayGoals = 0;
 this.awayBehinds = 0;
 
 /*
+ * Stoppage system.
+ */
+this.stoppageActive = false;
+this.stoppageType = null;
+
+this.stoppageX = 0;
+this.stoppageY = 0;
+
+/*
+ * A stationary football contested by opposing players
+ * for this long will create a ball-up.
+ */
+this.trappedBallTimer = 0;
+this.trappedBallDuration = 900;
+this.trappedContestDistance = 34;
+
+/*
  * Basic AI disposal system.
  *
  * Step 16E will replace the alternating test behaviour
@@ -2423,9 +2440,12 @@ this.updateAIDisposal();
 this.updateFootballFlight(delta);
 this.updateFootballMarking();
 this.updateFootballGroundPhysics(delta);
-this.updateFootballPossession(delta);
-this.updateTackleDetection(delta);
-this.keepFootballInsideField();
+this.updateStoppageDetection(delta);
+
+if (!this.stoppageActive) {
+    this.updateFootballPossession(delta);
+    this.updateTackleDetection(delta);
+}
 
 /*
  * Update the camera after all player and football
@@ -4144,6 +4164,180 @@ updateBallBounceAnimation(delta) {
     }
 }
 
+updateStoppageDetection(delta) {
+    if (
+        !this.football ||
+        this.stoppageActive ||
+        this.scoreDetected
+    ) {
+        return;
+    }
+
+    /*
+     * Boundary detection.
+     *
+     * A carried football cannot be out of bounds because
+     * players are already restricted to the oval.
+     */
+    if (
+        !this.possessionOwner &&
+        !this.footballIsInsideField()
+    ) {
+        const boundaryPoint =
+            this.getPointInsideField(
+                this.football.x,
+                this.football.y,
+                0,
+                0
+            );
+
+        this.startStoppage(
+            "BOUNDARY",
+            boundaryPoint.x,
+            boundaryPoint.y
+        );
+
+        return;
+    }
+
+    /*
+     * A trapped-ball contest can only occur when the
+     * football is loose and on the ground.
+     */
+    if (
+        this.possessionOwner ||
+        this.footballInFlight ||
+        this.footballGroundState ===
+            "BOUNCING"
+    ) {
+        this.trappedBallTimer = 0;
+        return;
+    }
+
+    const homeDistance =
+        Math.min(
+            Phaser.Math.Distance.Between(
+                this.player.x,
+                this.player.y,
+                this.football.x,
+                this.football.y
+            ),
+
+            Phaser.Math.Distance.Between(
+                this.teammate.x,
+                this.teammate.y,
+                this.football.x,
+                this.football.y
+            )
+        );
+
+    const awayDistance =
+        Phaser.Math.Distance.Between(
+            this.opponent.x,
+            this.opponent.y,
+            this.football.x,
+            this.football.y
+        );
+
+    const homePlayerIsContesting =
+        homeDistance <=
+        this.trappedContestDistance;
+
+    const awayPlayerIsContesting =
+        awayDistance <=
+        this.trappedContestDistance;
+
+    const footballSpeed =
+        Math.sqrt(
+            this.footballVelocityX ** 2 +
+            this.footballVelocityY ** 2
+        );
+
+    const footballIsNearlyStationary =
+        footballSpeed < 14;
+
+    if (
+        homePlayerIsContesting &&
+        awayPlayerIsContesting &&
+        footballIsNearlyStationary
+    ) {
+        this.trappedBallTimer +=
+            delta;
+
+        if (
+            this.trappedBallTimer >=
+            this.trappedBallDuration
+        ) {
+            this.startStoppage(
+                "BALL_UP",
+                this.football.x,
+                this.football.y
+            );
+        }
+
+        return;
+    }
+
+    this.trappedBallTimer = 0;
+}
+
+startStoppage(
+    stoppageType,
+    stoppageX,
+    stoppageY
+) {
+    if (this.stoppageActive) {
+        return;
+    }
+
+    this.stoppageActive = true;
+    this.stoppageType =
+        stoppageType;
+
+    this.stoppageX =
+        stoppageX;
+
+    this.stoppageY =
+        stoppageY;
+
+    this.trappedBallTimer = 0;
+
+    this.clearPossession();
+    this.stopFootballFlight();
+
+    this.football.x =
+        stoppageX;
+
+    this.football.y =
+        stoppageY;
+
+    this.footballVelocityX = 0;
+    this.footballVelocityY = 0;
+    this.footballGroundState =
+        "NONE";
+
+    this.resetTouchMovement();
+    this.cancelPassAim();
+
+    if (stoppageType === "BOUNDARY") {
+        this.passTypeText.setText(
+            "OUT OF BOUNDS"
+        );
+
+        console.log(
+            "Boundary throw-in required."
+        );
+    } else {
+        this.passTypeText.setText(
+            "BALL UP"dddd
+        );
+
+        console.log(
+            "Ball-up required."
+        );
+    }
+}
+
 updateFootballPossession(delta) {
     if (!this.football) {
         return;
@@ -5793,62 +5987,39 @@ keepPlayerInsideField() {
     );
 }
 
-keepFootballInsideField() {
-if (
-    !this.football ||
-    this.possessionOwner
+footballIsInsideField(
+    x = this.football.x,
+    y = this.football.y
 ) {
-    return;
-}
-
-    const {
-        centreX,
-        centreY,
-        horizontalRadius,
-        verticalRadius
-    } = this.field;
-
-    const ballRadius = 7;
-
-    const relativeX =
-        this.football.x - centreX;
-
-    const relativeY =
-        this.football.y - centreY;
-
-    const allowedHorizontalRadius =
-        horizontalRadius - ballRadius;
-
-    const allowedVerticalRadius =
-        verticalRadius - ballRadius;
-
-    const ellipseValue =
-        (relativeX * relativeX) /
-        (allowedHorizontalRadius * allowedHorizontalRadius) +
-        (relativeY * relativeY) /
-        (allowedVerticalRadius * allowedVerticalRadius);
-
-    if (ellipseValue <= 1) {
-        return;
+    if (!this.field) {
+        return true;
     }
 
-    const correctionScale =
-        1 / Math.sqrt(ellipseValue);
+    const relativeX =
+        x - this.field.centreX;
 
-    this.football.x =
-        centreX +
-        relativeX * correctionScale;
+    const relativeY =
+        y - this.field.centreY;
 
-    this.football.y =
-        centreY +
-        relativeY * correctionScale;
+    const ellipseValue =
+        (
+            relativeX *
+            relativeX
+        ) /
+        (
+            this.field.horizontalRadius *
+            this.field.horizontalRadius
+        ) +
+        (
+            relativeY *
+            relativeY
+        ) /
+        (
+            this.field.verticalRadius *
+            this.field.verticalRadius
+        );
 
-if (
-    this.footballInFlight ||
-    this.footballGroundState !== "NONE"
-) {
-    this.stopFootballFlight();
-}
+    return ellipseValue <= 1;
 }
 
 createGround() {
