@@ -4185,26 +4185,49 @@ updateStoppageDetection(delta) {
      * A carried football cannot be out of bounds because
      * players are already restricted to the oval.
      */
-    if (
-        !this.possessionOwner &&
-        !this.footballIsInsideField()
-    ) {
-        const boundaryPoint =
-            this.getPointInsideField(
-                this.football.x,
-                this.football.y,
-                0,
-                0
-            );
+if (
+    !this.possessionOwner &&
+    !this.footballIsInsideField()
+) {
+    const boundaryPoint =
+        this.getPointInsideField(
+            this.football.x,
+            this.football.y,
+            0,
+            0
+        );
 
-        this.startStoppage(
-            "BOUNDARY",
+    /*
+     * A kick crossing the boundary while still
+     * airborne is out on the full.
+     */
+    const isOutOnFull =
+        this.footballInFlight &&
+        this.footballFlightType ===
+            "KICK" &&
+        this.lastDisposalPlayer;
+
+    if (isOutOnFull) {
+        this.startOutOnFullFreeKick(
             boundaryPoint.x,
             boundaryPoint.y
         );
 
         return;
     }
+
+    /*
+     * A handball, bouncing kick or loose football
+     * crossing the boundary produces a throw-in.
+     */
+    this.startStoppage(
+        "BOUNDARY",
+        boundaryPoint.x,
+        boundaryPoint.y
+    );
+
+    return;
+}
 
     /*
      * A trapped-ball contest can only occur when the
@@ -4364,6 +4387,204 @@ if (!this.stoppageRestartScheduled) {
 /*
  * End startStoppage().
  */
+}
+
+startOutOnFullFreeKick(
+    boundaryX,
+    boundaryY
+) {
+    if (this.stoppageActive) {
+        return;
+    }
+
+    /*
+     * Determine which team receives the free kick.
+     */
+    let freeKickReceiver;
+
+    if (
+        this.isHomePlayer(
+            this.lastDisposalPlayer
+        )
+    ) {
+        /*
+         * A home-player kick went out on the full,
+         * so Green receives the free kick.
+         */
+        freeKickReceiver =
+            this.opponent;
+    } else {
+        /*
+         * Green's kick went out on the full.
+         * Award the free kick to the nearest home player.
+         */
+        const redDistance =
+            Phaser.Math.Distance.Between(
+                this.player.x,
+                this.player.y,
+                boundaryX,
+                boundaryY
+            );
+
+        const blueDistance =
+            Phaser.Math.Distance.Between(
+                this.teammate.x,
+                this.teammate.y,
+                boundaryX,
+                boundaryY
+            );
+
+        freeKickReceiver =
+            redDistance <= blueDistance
+                ? this.player
+                : this.teammate;
+    }
+
+    this.stoppageActive = true;
+    this.stoppageType =
+        "OUT_ON_FULL";
+
+    this.stoppageX =
+        boundaryX;
+
+    this.stoppageY =
+        boundaryY;
+
+    this.clearPossession();
+    this.stopFootballFlight();
+
+    this.footballVelocityX = 0;
+    this.footballVelocityY = 0;
+
+    /*
+     * Move the free-kick location slightly inside
+     * the oval.
+     */
+    const inwardDirection =
+        new Phaser.Math.Vector2(
+            this.field.centreX -
+                boundaryX,
+
+            this.field.centreY -
+                boundaryY
+        );
+
+    if (inwardDirection.length() > 0) {
+        inwardDirection.normalize();
+    }
+
+    const freeKickX =
+        boundaryX +
+        inwardDirection.x * 24;
+
+    const freeKickY =
+        boundaryY +
+        inwardDirection.y * 24;
+
+    freeKickReceiver.setPosition(
+        freeKickX,
+        freeKickY
+    );
+
+    this.keepObjectInsideField(
+        freeKickReceiver
+    );
+
+    /*
+     * Stop the other players from standing directly
+     * on the free-kick receiver.
+     */
+    const oppositionSpacing = 44;
+
+    if (freeKickReceiver === this.opponent) {
+        this.player.setPosition(
+            freeKickX +
+                inwardDirection.x *
+                oppositionSpacing,
+
+            freeKickY +
+                inwardDirection.y *
+                oppositionSpacing
+        );
+
+        this.teammate.setPosition(
+            freeKickX +
+                inwardDirection.x *
+                60,
+
+            freeKickY +
+                inwardDirection.y *
+                60 +
+                34
+        );
+    } else {
+        this.opponent.setPosition(
+            freeKickX +
+                inwardDirection.x *
+                oppositionSpacing,
+
+            freeKickY +
+                inwardDirection.y *
+                oppositionSpacing
+        );
+    }
+
+    this.keepObjectInsideField(
+        this.player
+    );
+
+    this.keepObjectInsideField(
+        this.teammate
+    );
+
+    this.keepObjectInsideField(
+        this.opponent
+    );
+
+    this.resetTouchMovement();
+    this.cancelPassAim();
+
+    this.passTypeText.setText(
+        "OUT ON FULL"
+    );
+
+    console.log(
+        "Out on the full. Opposition free kick."
+    );
+
+    /*
+     * Briefly display the decision before awarding
+     * possession.
+     */
+    this.time.delayedCall(
+        850,
+        () => {
+            if (
+                !this.stoppageActive ||
+                this.stoppageType !==
+                    "OUT_ON_FULL"
+            ) {
+                return;
+            }
+
+            this.stoppageActive = false;
+            this.stoppageType = null;
+
+            this.passTypeText.setText(
+                ""
+            );
+
+            this.setPossessionOwner(
+                freeKickReceiver
+            );
+
+            this.updateControlledPlayerIndicator();
+
+            console.log(
+                "Out-on-the-full free kick restarted play."
+            );
+        }
+    );
 }
 
 restartStoppage() {
