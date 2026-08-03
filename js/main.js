@@ -895,6 +895,12 @@ this.trappedBallDuration = 900;
 this.trappedContestDistance = 34;
 
 /*
+ * Stoppage restart timing.
+ */
+this.stoppageRestartDelay = 1100;
+this.stoppageRestartScheduled = false;
+
+/*
  * Basic AI disposal system.
  *
  * Step 16E will replace the alternating test behaviour
@@ -4290,9 +4296,12 @@ startStoppage(
         return;
     }
 
-    this.stoppageActive = true;
-    this.stoppageType =
-        stoppageType;
+this.stoppageActive = true;
+this.stoppageType =
+    stoppageType;
+
+this.stoppageRestartScheduled =
+    false;
 
     this.stoppageX =
         stoppageX;
@@ -4319,23 +4328,312 @@ startStoppage(
     this.resetTouchMovement();
     this.cancelPassAim();
 
-    if (stoppageType === "BOUNDARY") {
-        this.passTypeText.setText(
-            "OUT OF BOUNDS"
-        );
+if (stoppageType === "BOUNDARY") {
+    this.passTypeText.setText(
+        "OUT OF BOUNDS"
+    );
 
-        console.log(
-            "Boundary throw-in required."
-        );
-    } else {
-        this.passTypeText.setText(
-            "BALL UP"dddd
-        );
+    console.log(
+        "Boundary throw-in required."
+    );
+} else {
+    this.passTypeText.setText(
+        "BALL UP"
+    );
 
-        console.log(
-            "Ball-up required."
-        );
+    console.log(
+        "Ball-up required."
+    );
+}
+
+/*
+ * Schedule one automatic restart.
+ */
+if (!this.stoppageRestartScheduled) {
+    this.stoppageRestartScheduled =
+        true;
+
+    this.time.delayedCall(
+        this.stoppageRestartDelay,
+        () => {
+            this.restartStoppage();
+        }
+    );
+}
+
+/*
+ * End startStoppage().
+ */
+}
+
+restartStoppage() {
+    if (!this.stoppageActive) {
+        return;
     }
+
+    if (
+        this.stoppageType ===
+        "BOUNDARY"
+    ) {
+        this.restartBoundaryThrowIn();
+    } else if (
+        this.stoppageType ===
+        "BALL_UP"
+    ) {
+        this.restartBallUp();
+    }
+}
+
+restartBoundaryThrowIn() {
+    const restartX =
+        this.stoppageX;
+
+    const restartY =
+        this.stoppageY;
+
+    /*
+     * Find a direction pointing from the boundary
+     * toward the middle of the oval.
+     */
+    const inwardDirection =
+        new Phaser.Math.Vector2(
+            this.field.centreX -
+                restartX,
+
+            this.field.centreY -
+                restartY
+        );
+
+    if (inwardDirection.length() > 0) {
+        inwardDirection.normalize();
+    }
+
+    const sidewaysDirection =
+        new Phaser.Math.Vector2(
+            -inwardDirection.y,
+            inwardDirection.x
+        );
+
+    /*
+     * Place the players on opposite sides of the
+     * throw-in location.
+     */
+    this.player.setPosition(
+        restartX +
+            inwardDirection.x * 38 +
+            sidewaysDirection.x * 24,
+
+        restartY +
+            inwardDirection.y * 38 +
+            sidewaysDirection.y * 24
+    );
+
+    this.teammate.setPosition(
+        restartX +
+            inwardDirection.x * 58 -
+            sidewaysDirection.x * 32,
+
+        restartY +
+            inwardDirection.y * 58 -
+            sidewaysDirection.y * 32
+    );
+
+    this.opponent.setPosition(
+        restartX +
+            inwardDirection.x * 38 -
+            sidewaysDirection.x * 24,
+
+        restartY +
+            inwardDirection.y * 38 -
+            sidewaysDirection.y * 24
+    );
+
+    this.keepObjectInsideField(
+        this.player
+    );
+
+    this.keepObjectInsideField(
+        this.teammate
+    );
+
+    this.keepObjectInsideField(
+        this.opponent
+    );
+
+    /*
+     * Throw the football inward and slightly upward
+     * along the ground view.
+     */
+    this.football.x =
+        restartX +
+        inwardDirection.x * 8;
+
+    this.football.y =
+        restartY +
+        inwardDirection.y * 8;
+
+    this.footballVelocityX =
+        inwardDirection.x * 115;
+
+    this.footballVelocityY =
+        inwardDirection.y * 115;
+
+    this.footballInFlight = true;
+    this.footballFlightType =
+        "THROW_IN";
+
+    this.footballFlightTime = 0;
+    this.footballFlightDistance = 0;
+    this.footballCanBeMarked = false;
+
+    this.footballEstimatedFlightDuration =
+        0.75;
+
+    this.footballRotationSpeed = 420;
+
+    this.football.setStrokeStyle(
+        2,
+        0xffffff
+    );
+
+    if (this.footballShadow) {
+        this.footballShadow
+            .setPosition(
+                this.football.x,
+                this.football.y + 5
+            )
+            .setVisible(true);
+    }
+
+    this.finishStoppageRestart();
+
+    console.log(
+        "Boundary throw-in restarted play."
+    );
+}
+
+restartBallUp() {
+    const restartX =
+        this.stoppageX;
+
+    const restartY =
+        this.stoppageY;
+
+    /*
+     * Place one player from each team beside the
+     * stoppage, with the second home player nearby.
+     */
+    this.player.setPosition(
+        restartX - 28,
+        restartY
+    );
+
+    this.opponent.setPosition(
+        restartX + 28,
+        restartY
+    );
+
+    this.teammate.setPosition(
+        restartX,
+        restartY + 46
+    );
+
+    this.keepObjectInsideField(
+        this.player
+    );
+
+    this.keepObjectInsideField(
+        this.teammate
+    );
+
+    this.keepObjectInsideField(
+        this.opponent
+    );
+
+    /*
+     * Send the football slightly away from the exact
+     * centre so the nearest player can contest it.
+     */
+    const randomDirection =
+        Phaser.Math.RandomXY(
+            new Phaser.Math.Vector2(),
+            1
+        );
+
+    this.football.x =
+        restartX;
+
+    this.football.y =
+        restartY;
+
+    this.footballVelocityX =
+        randomDirection.x * 65;
+
+    this.footballVelocityY =
+        randomDirection.y * 65;
+
+    this.footballInFlight = true;
+    this.footballFlightType =
+        "BALL_UP";
+
+    this.footballFlightTime = 0;
+    this.footballFlightDistance = 0;
+    this.footballCanBeMarked = false;
+
+    this.footballEstimatedFlightDuration =
+        0.55;
+
+    this.footballRotationSpeed = 360;
+
+    this.football.setStrokeStyle(
+        2,
+        0xffffff
+    );
+
+    if (this.footballShadow) {
+        this.footballShadow
+            .setPosition(
+                this.football.x,
+                this.football.y + 5
+            )
+            .setVisible(true);
+    }
+
+    this.finishStoppageRestart();
+
+    console.log(
+        "Ball-up restarted play."
+    );
+}
+
+finishStoppageRestart() {
+    this.stoppageActive = false;
+    this.stoppageType = null;
+
+    this.stoppageRestartScheduled =
+        false;
+
+    this.trappedBallTimer = 0;
+
+    this.footballPickupLockTimer =
+        260;
+
+    this.passTypeText.setText("");
+
+    this.isTackleActive = false;
+    this.tackleTimer = 0;
+    this.activeTackler = null;
+
+    /*
+     * Remove old movement momentum.
+     */
+    this.player.movementVelocityX = 0;
+    this.player.movementVelocityY = 0;
+
+    this.teammate.movementVelocityX = 0;
+    this.teammate.movementVelocityY = 0;
+
+    this.updateControlledPlayerIndicator();
 }
 
 updateFootballPossession(delta) {
@@ -4652,10 +4950,22 @@ this.footballCanBeMarked =
      *
      * Handballs lose speed more quickly.
      */
-    const dragPerSecond =
-        this.footballFlightType === "KICK"
-            ? 1.25
-            : 2.15;
+let dragPerSecond;
+
+if (
+    this.footballFlightType === "KICK"
+) {
+    dragPerSecond = 1.25;
+} else if (
+    this.footballFlightType ===
+        "THROW_IN" ||
+    this.footballFlightType ===
+        "BALL_UP"
+) {
+    dragPerSecond = 2.4;
+} else {
+    dragPerSecond = 2.15;
+}
 
     /*
      * Exponential drag behaves consistently even if
