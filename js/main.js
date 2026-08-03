@@ -1671,17 +1671,32 @@ const previewWasMoving =
 const previewWasPressured =
     this.isTackleActive;
 
-let trajectoryUncertainty = 0;
+/*
+ * Uncertainty is shown by hiding more of the
+ * trajectory near the landing zone.
+ */
+let hiddenTrajectoryPercentage = 0;
 
 if (previewWasMoving) {
-    trajectoryUncertainty +=
-        isKick ? 5 : 3;
+    hiddenTrajectoryPercentage +=
+        isKick ? 0.14 : 0.10;
 }
 
 if (previewWasPressured) {
-    trajectoryUncertainty +=
-        isKick ? 10 : 7;
+    hiddenTrajectoryPercentage +=
+        isKick ? 0.24 : 0.18;
 }
+
+hiddenTrajectoryPercentage =
+    Phaser.Math.Clamp(
+        hiddenTrajectoryPercentage,
+        0,
+        0.38
+    );
+
+const visibleTrajectoryLimit =
+    1 -
+    hiddenTrajectoryPercentage;
 
     /*
      * Draw individual points along the curved path.
@@ -1694,6 +1709,17 @@ if (previewWasPressured) {
         const progress =
             dotIndex /
             dotCount;
+
+            /*
+ * Do not draw the final dots when the disposal is
+ * uncertain.
+ */
+if (
+    progress >
+    visibleTrajectoryLimit
+) {
+    continue;
+}
 
         const inverseProgress =
             1 - progress;
@@ -1762,81 +1788,6 @@ this.aimGraphics.fillCircle(
     dotRadius
 );
 
-/*
- * During uncertain disposals, split the final section
- * into two possible paths.
- *
- * The dots remain fully visible and no landing circle
- * is used.
- */
-if (
-    trajectoryUncertainty > 0 &&
-    progress >= 0.65
-) {
-    const uncertaintyProgress =
-        Phaser.Math.Clamp(
-            (
-                progress - 0.65
-            ) /
-            0.35,
-            0,
-            1
-        );
-
-    const spreadDistance =
-        trajectoryUncertainty *
-        uncertaintyProgress;
-
-    /*
-     * Calculate a direction perpendicular to the
-     * intended disposal path.
-     */
-    const pathDirection =
-        new Phaser.Math.Vector2(
-            endX - startX,
-            endY - startY
-        );
-
-    if (pathDirection.length() > 0) {
-        pathDirection.normalize();
-    }
-
-    const perpendicularX =
-        -pathDirection.y;
-
-    const perpendicularY =
-        pathDirection.x;
-
-    const uncertaintyDotRadius =
-        Math.max(
-            1.2,
-            dotRadius - 0.6
-        );
-
-    this.aimGraphics.fillCircle(
-        dotX +
-            perpendicularX *
-            spreadDistance,
-
-        dotY +
-            perpendicularY *
-            spreadDistance,
-
-        uncertaintyDotRadius
-    );
-
-    this.aimGraphics.fillCircle(
-        dotX -
-            perpendicularX *
-            spreadDistance,
-
-        dotY -
-            perpendicularY *
-            spreadDistance,
-
-        uncertaintyDotRadius
-    );
-}
     }
 
     if (
