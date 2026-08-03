@@ -45,6 +45,7 @@ this.createScoreboard();
 this.createPlayer();
 this.createTeammate();
 this.createOpponent();
+this.createFormationSystem();
 
 /*
  * The controlled and supporting roles can move between
@@ -194,6 +195,11 @@ this.playerDeceleration = 760;
 this.player.movementVelocityX = 0;
 this.player.movementVelocityY = 0;
 
+/*
+ * Home player role.
+ */
+this.player.role = "MIDFIELDER";
+
     this.moveLeft = false;
     this.moveRight = false;
     this.moveUp = false;
@@ -225,6 +231,11 @@ this.teammateData = {
 
 this.teammate.movementVelocityX = 0;
 this.teammate.movementVelocityY = 0;
+
+/*
+ * Home teammate role.
+ */
+this.teammate.role = "FORWARD";
 }
 
 createControlledPlayerIndicator() {
@@ -552,14 +563,55 @@ this.opponent = this.add.rectangle(
         0xffffff
     );
 
-    this.opponentData = {
-        team: "away",
-        state: "CHASE",
-        speed: 135,
-        targetX: this.opponent.x,
-        targetY: this.opponent.y,
-        hasBall: false
+this.opponentData = {
+    team: "away",
+    state: "CHASE",
+    speed: 135,
+    targetX: this.opponent.x,
+    targetY: this.opponent.y,
+    hasBall: false
+};
+
+/*
+ * Away player role.
+ */
+this.opponent.role = "DEFENDER";
+}
+
+createFormationSystem() {
+
+    /*
+     * Prototype centre-bounce formation.
+     *
+     * Future steps will replace this with
+     * multiple formations and role-based movement.
+     */
+    this.formations = {
+
+        centreBounce: {
+
+            MIDFIELDER: {
+                x: this.field.centreX - 120,
+                y: this.field.centreY
+            },
+
+            FORWARD: {
+                x: this.field.centreX - 40,
+                y: this.field.centreY + 80
+            },
+
+            DEFENDER: {
+                x: this.field.centreX + 120,
+                y: this.field.centreY
+            }
+
+        }
+
     };
+
+    console.log(
+        "Formation system initialised."
+    );
 }
 
 createFootball() {
@@ -3477,20 +3529,23 @@ restartAfterScore() {
      *
      * Phase 16 will replace these with formations.
      */
-    this.player.setPosition(
-        this.field.centreX - 120,
-        this.field.centreY
-    );
+const formation =
+    this.formations.centreBounce;
 
-    this.teammate.setPosition(
-        this.field.centreX - 40,
-        this.field.centreY + 80
-    );
+this.player.setPosition(
+    formation.MIDFIELDER.x,
+    formation.MIDFIELDER.y
+);
 
-    this.opponent.setPosition(
-        this.field.centreX + 120,
-        this.field.centreY
-    );
+this.teammate.setPosition(
+    formation.FORWARD.x,
+    formation.FORWARD.y
+);
+
+this.opponent.setPosition(
+    formation.DEFENDER.x,
+    formation.DEFENDER.y
+);
 
     /*
      * Red becomes the controlled player after every
