@@ -2080,12 +2080,20 @@ if (this.hasAwayPossession()) {
             ? -34
             : 34;
 
-    const targetX =
-        this.opponent.x + 18;
+/*
+ * The secondary defender protects the corridor between
+ * Green and the home-team goal rather than standing
+ * directly beside the contest.
+ */
+const defensiveGoalSideOffset = 42;
 
-    const targetY =
-        this.opponent.y +
-        defensiveOffsetY;
+const targetX =
+    this.opponent.x -
+    defensiveGoalSideOffset;
+
+const targetY =
+    this.opponent.y +
+    defensiveOffsetY;
 
     const correctedTarget =
         this.getPointInsideField(
@@ -2506,91 +2514,179 @@ const carrySpeed =
      * Chase the home ball carrier during home
      * possession.
      */
-    if (this.hasHomePossession()) {
+/*
+ * During home possession, Green balances direct
+ * pressure with defensive coverage.
+ */
+if (this.hasHomePossession()) {
+    this.opponentData.state =
+        "DEFENSIVE_ZONE";
+
+    const ballCarrier =
+        this.possessionOwner;
+
+    const likelyReceiver =
+        this.supportPlayer;
+
+    /*
+     * Measure Green's distance from the ball carrier
+     * and the likely receiving player.
+     */
+    const distanceToCarrier =
+        Phaser.Math.Distance.Between(
+            this.opponent.x,
+            this.opponent.y,
+            ballCarrier.x,
+            ballCarrier.y
+        );
+
+    const distanceToReceiver =
+        Phaser.Math.Distance.Between(
+            this.opponent.x,
+            this.opponent.y,
+            likelyReceiver.x,
+            likelyReceiver.y
+        );
+
+    /*
+     * Green pressures the carrier when close enough.
+     *
+     * Otherwise, Green protects the space between the
+     * carrier, receiver and attacking goal.
+     */
+    const directPressureRange = 95;
+
+    let targetX;
+    let targetY;
+
+    if (
+        distanceToCarrier <=
+        directPressureRange
+    ) {
         this.opponentData.state =
-            "CHASE";
+            "PRESSURE_CARRIER";
 
-/*
- * Instead of standing directly on top of the ball
- * carrier, defend slightly goal-side and offset.
- */
+        /*
+         * Defend slightly goal-side of the carrier.
+         */
+        const goalSideOffset = 26;
 
-const goalSideOffset = 40;
+        const lateralOffset =
+            this.opponent.y <
+            ballCarrier.y
+                ? -18
+                : 18;
 
-const lateralOffset =
-    this.opponent.y < this.possessionOwner.y
-        ? -30
-        : 30;
+        targetX =
+            ballCarrier.x +
+            goalSideOffset;
 
-const targetX =
-    this.possessionOwner.x + goalSideOffset;
+        targetY =
+            ballCarrier.y +
+            lateralOffset;
+    } else {
+        this.opponentData.state =
+            "COVER_RECEIVER";
 
-const targetY =
-    this.possessionOwner.y + lateralOffset;
+        /*
+         * Position Green between the likely receiver
+         * and the attacking goal.
+         */
+        const receiverGoalSideOffset = 34;
 
-        this.opponentData.targetX =
-            targetX;
+        targetX =
+            likelyReceiver.x +
+            receiverGoalSideOffset;
 
-        this.opponentData.targetY =
-            targetY;
-
-        const directionToPlayer =
-            new Phaser.Math.Vector2(
-                targetX -
-                    this.opponent.x,
-
-                targetY -
-                    this.opponent.y
+        /*
+         * Shade slightly toward the ball carrier so
+         * Green can react to either player.
+         */
+        targetY =
+            Phaser.Math.Linear(
+                likelyReceiver.y,
+                ballCarrier.y,
+                0.3
             );
+    }
 
-        const distanceToPlayer =
-            directionToPlayer.length();
+    /*
+     * Keep Green's defensive target inside the oval.
+     */
+    const correctedTarget =
+        this.getPointInsideField(
+            targetX,
+            targetY
+        );
 
-/*
- * Green now applies pressure without standing
- * directly beside the ball carrier.
- */
+    targetX =
+        correctedTarget.x;
 
-const pressureDistance = 55;
+    targetY =
+        correctedTarget.y;
 
-        if (
-            distanceToPlayer <=
-            pressureDistance
-        ) {
-            this.keepObjectInsideField(
-                this.opponent
-            );
+    this.opponentData.targetX =
+        targetX;
 
-            return;
-        }
+    this.opponentData.targetY =
+        targetY;
 
-        directionToPlayer.normalize();
+    const directionToTarget =
+        new Phaser.Math.Vector2(
+            targetX -
+                this.opponent.x,
 
-        const maximumMovement =
-            this.opponentData.speed *
-            deltaSeconds;
+            targetY -
+                this.opponent.y
+        );
 
-        const movementDistance =
-            Math.min(
-                maximumMovement,
-                distanceToPlayer -
-                    pressureDistance
-            );
+    const distanceToTarget =
+        directionToTarget.length();
 
-        this.opponent.x +=
-            directionToPlayer.x *
-            movementDistance;
+    /*
+     * Prevent constant tiny movements around the
+     * defensive target.
+     */
+    const zoningStoppingDistance = 12;
 
-        this.opponent.y +=
-            directionToPlayer.y *
-            movementDistance;
-
+    if (
+        distanceToTarget <=
+        zoningStoppingDistance
+    ) {
         this.keepObjectInsideField(
             this.opponent
         );
 
         return;
     }
+
+    directionToTarget.normalize();
+
+    const maximumMovement =
+        this.opponentData.speed *
+        deltaSeconds;
+
+    const movementDistance =
+        Math.min(
+            maximumMovement,
+            distanceToTarget -
+                zoningStoppingDistance
+        );
+
+    this.opponent.x +=
+        directionToTarget.x *
+        movementDistance;
+
+    this.opponent.y +=
+        directionToTarget.y *
+        movementDistance;
+
+    this.keepObjectInsideField(
+        this.opponent
+    );
+
+    return;
+}
 
 /*
  * While a kick is airborne, Green predicts where the
