@@ -819,6 +819,15 @@ this.tackleMovementMultiplier = 0.28;
 this.activeTackler = null;
 
 /*
+ * Simplified tackle-contact detection.
+ *
+ * A tackler whose centre is sufficiently above the
+ * carrier's centre is treated as making high contact.
+ */
+this.highTackleVerticalThreshold = 9;
+this.currentTackleIsHigh = false;
+
+/*
  * Tacklers briefly recover after completing or
  * cancelling a tackle.
  */
@@ -6209,6 +6218,31 @@ if (!this.isTackleActive) {
     this.activeTackler =
         defender;
 
+    /*
+     * In the current top-down prototype, a tackler
+     * positioned too far above the carrier represents
+     * contact above the legal tackling zone.
+     */
+    const tackleVerticalDifference =
+        defender.y -
+        this.possessionOwner.y;
+
+    this.currentTackleIsHigh =
+        tackleVerticalDifference <=
+        -this.highTackleVerticalThreshold;
+
+    if (this.currentTackleIsHigh) {
+        const infringedCarrier =
+            this.possessionOwner;
+
+        this.startHighTackleFreeKick(
+            infringedCarrier,
+            defender
+        );
+
+        return;
+    }
+
 /*
  * Give immediate visual feedback when a tackle
  * begins.
@@ -6325,6 +6359,101 @@ return;
 
 }
 
+startHighTackleFreeKick(
+    freeKickReceiver,
+    offendingTackler
+) {
+    if (
+        !freeKickReceiver ||
+        !offendingTackler
+    ) {
+        return;
+    }
+
+    /*
+     * Cancel the normal tackle outcome.
+     */
+    this.isTackleActive = false;
+    this.tackleTimer = 0;
+    this.activeTackler = null;
+    this.currentTackleIsHigh = false;
+
+    /*
+     * The offending tackler still enters the normal
+     * tackle-fatigue period.
+     */
+    this.fatiguedTackler =
+        offendingTackler;
+
+    this.tackleFatigueTimer =
+        this.tackleFatigueDuration;
+
+    /*
+     * Move the tackler a short distance away so the
+     * same contact does not immediately trigger again.
+     */
+    const separationDirection =
+        new Phaser.Math.Vector2(
+            offendingTackler.x -
+                freeKickReceiver.x,
+
+            offendingTackler.y -
+                freeKickReceiver.y
+        );
+
+    if (
+        separationDirection.length() === 0
+    ) {
+        separationDirection.set(
+            1,
+            0
+        );
+    } else {
+        separationDirection.normalize();
+    }
+
+    offendingTackler.x =
+        freeKickReceiver.x +
+        separationDirection.x * 42;
+
+    offendingTackler.y =
+        freeKickReceiver.y +
+        separationDirection.y * 42;
+
+    this.keepObjectInsideField(
+        offendingTackler
+    );
+
+    /*
+     * Keep possession with the infringed player.
+     */
+    this.setPossessionOwner(
+        freeKickReceiver
+    );
+
+    this.resetTouchMovement();
+    this.cancelPassAim();
+
+    this.passTypeText.setText(
+        "HIGH TACKLE"
+    );
+
+    console.log(
+        "High tackle. Free kick to the ball carrier."
+    );
+
+    this.time.delayedCall(
+        850,
+        () => {
+            if (this.passTypeText) {
+                this.passTypeText.setText(
+                    ""
+                );
+            }
+        }
+    );
+}
+
 completeTackleSpill() {
 /*
  * Cancel the tackle outcome if the carrier disposed
@@ -6332,11 +6461,13 @@ completeTackleSpill() {
  */
 if (
     !this.isTackleActive ||
-    !this.possessionOwner
+    !this.possessionOwner ||
+    this.currentTackleIsHigh
 ) {
     this.isTackleActive = false;
     this.tackleTimer = 0;
     this.activeTackler = null;
+    this.currentTackleIsHigh = false;
 
     return;
 }
