@@ -914,7 +914,7 @@ this.awayBehinds = 0;
  */
 this.currentQuarter = 1;
 
-this.quarterDuration = 90 * 1000;
+this.quarterDuration = 10 * 1000;
 this.quarterTimeRemaining =
     this.quarterDuration;
 
@@ -922,6 +922,12 @@ this.quarterBreakDuration = 2200;
 
 this.quarterBreakActive = false;
 this.matchFinished = false;
+
+/*
+ * When the siren sounds during a disposal, the quarter
+ * waits until the football is no longer in flight.
+ */
+this.quarterSirenPending = false;
 
 /*
  * Stoppage system.
@@ -2550,6 +2556,18 @@ this.updateAIDisposal();
 this.updateFootballFlight(delta);
 this.updateFootballMarking();
 this.updateFootballGroundPhysics(delta);
+
+/*
+ * End the quarter once the after-the-siren disposal
+ * has fully resolved.
+ */
+if (
+    this.quarterSirenPending &&
+    !this.footballInFlight
+) {
+    this.quarterSirenPending = false;
+    this.endQuarter();
+}
 this.updateStoppageDetection(delta);
 
 if (!this.stoppageActive) {
@@ -2582,11 +2600,20 @@ updateQuarterTimer(delta) {
 
     this.updateQuarterDisplay();
 
-    if (
-        this.quarterTimeRemaining === 0
-    ) {
-        this.endQuarter();
+if (
+    this.quarterTimeRemaining === 0
+) {
+    /*
+     * Allow an existing disposal to finish after the
+     * siren before ending the quarter.
+     */
+    if (this.footballInFlight) {
+        this.quarterSirenPending = true;
+        return;
     }
+
+    this.endQuarter();
+}
 }
 
 updateQuarterDisplay() {
@@ -2626,6 +2653,8 @@ endQuarter() {
     ) {
         return;
     }
+
+    this.quarterSirenPending = false;
 
     /*
      * Cancel the current passage of play.
@@ -2697,6 +2726,8 @@ startNextQuarter() {
         this.quarterDuration;
 
     this.quarterBreakActive = false;
+
+    this.quarterSirenPending = false;
 
     this.passTypeText.setText("");
 
