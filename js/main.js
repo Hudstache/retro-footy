@@ -883,9 +883,12 @@ this.awayBehinds = 0;
  * Step 16E will replace the alternating test behaviour
  * with genuine decision-making.
  */
-this.aiDisposalDelay = 1100;
+/*
+ * AI possession decision settings.
+ */
+this.aiMinimumDecisionTime = 650;
+this.aiMaximumHoldTime = 1500;
 this.aiDisposalCompleted = false;
-this.aiNextDisposalIsKick = true;
 
     // Drag aiming
     this.isAimingPass = false;
@@ -3277,67 +3280,125 @@ this.keepObjectInsideField(
 }
 
 updateAIDisposal() {
-    /*
-     * Green can only dispose while he owns the ball.
-     */
     if (!this.hasAwayPossession()) {
         return;
     }
 
-    /*
-     * Only one disposal can occur during each
-     * possession.
-     */
     if (this.aiDisposalCompleted) {
         return;
     }
 
-    /*
-     * Green cannot dispose during an active tackle.
-     */
     if (this.isTackleActive) {
         return;
     }
 
+    const distanceToControlledDefender =
+        Phaser.Math.Distance.Between(
+            this.opponent.x,
+            this.opponent.y,
+            this.controlledPlayer.x,
+            this.controlledPlayer.y
+        );
+
+    const distanceToSupportDefender =
+        Phaser.Math.Distance.Between(
+            this.opponent.x,
+            this.opponent.y,
+            this.supportPlayer.x,
+            this.supportPlayer.y
+        );
+
+    const nearestDefenderDistance =
+        Math.min(
+            distanceToControlledDefender,
+            distanceToSupportDefender
+        );
+
+    const distanceToAwayGoal =
+        this.opponent.x -
+        this.field.leftGoalLineX;
+
     /*
-     * Hold possession briefly before disposing.
+     * Green disposes earlier when under pressure.
      */
+    const underStrongPressure =
+        nearestDefenderDistance <= 55;
+
+    const underModeratePressure =
+        nearestDefenderDistance <= 95;
+
+    const decisionTime =
+        underStrongPressure
+            ? this.aiMinimumDecisionTime
+            : underModeratePressure
+                ? 900
+                : this.aiMaximumHoldTime;
+
     if (
         this.possessionTimer <
-        this.aiDisposalDelay
+        decisionTime
     ) {
         return;
     }
 
-    const isKick =
-        this.aiNextDisposalIsKick;
+    let isKick = true;
 
     /*
-     * Green currently attacks toward the left.
-     *
-     * The test kick travels farther than the test
-     * handball.
+     * Handball when strongly pressured and a short
+     * escape disposal is more realistic.
+     */
+    if (underStrongPressure) {
+        isKick = false;
+    }
+
+    /*
+     * Prefer kicking when Green is close enough to
+     * attack the left-side scoring area.
+     */
+    if (distanceToAwayGoal < 190) {
+        isKick = true;
+    }
+
+    /*
+     * Choose disposal distance.
      */
     const targetDistance =
-        isKick ? 185 : 58;
-
-    const verticalOffset =
         isKick
-            ? Phaser.Math.Between(-65, 65)
-            : Phaser.Math.Between(-30, 30);
+            ? Phaser.Math.Clamp(
+                distanceToAwayGoal,
+                110,
+                245
+            )
+            : Phaser.Math.Between(
+                42,
+                60
+            );
+
+    /*
+     * Aim generally toward the left-side goal corridor.
+     */
+    const goalCorridorInfluence =
+        isKick ? 0.55 : 0.25;
+
+    const targetY =
+        Phaser.Math.Linear(
+            this.opponent.y,
+            this.field.centreY,
+            goalCorridorInfluence
+        ) +
+        Phaser.Math.Between(
+            isKick ? -38 : -22,
+            isKick ? 38 : 22
+        );
 
     const rawTargetX =
         this.opponent.x -
         targetDistance;
 
-    const rawTargetY =
-        this.opponent.y +
-        verticalOffset;
-
     const correctedTarget =
         this.getPointInsideField(
             rawTargetX,
-            rawTargetY
+            targetY
         );
 
     this.aiDisposalCompleted = true;
@@ -3348,11 +3409,11 @@ updateAIDisposal() {
         isKick
     );
 
-    /*
-     * Alternate disposal type for testing.
-     */
-    this.aiNextDisposalIsKick =
-        !this.aiNextDisposalIsKick;
+    console.log(
+        isKick
+            ? "AI decision: kick."
+            : "AI decision: handball."
+    );
 }
 
 launchAIFootball(
@@ -3371,8 +3432,45 @@ launchAIFootball(
      * Use a medium-strength kick or handball for this
      * first AI disposal prototype.
      */
-    const powerPercentage =
-        isKick ? 0.55 : 0.7;
+/*
+ * Calculate disposal power from the selected target
+ * distance.
+ */
+const targetDistance =
+    Phaser.Math.Distance.Between(
+        disposingPlayer.x,
+        disposingPlayer.y,
+        targetX,
+        targetY
+    );
+
+let powerPercentage;
+
+if (isKick) {
+    powerPercentage =
+        Phaser.Math.Clamp(
+            (
+                targetDistance - 62
+            ) /
+            (
+                269 - 62
+            ),
+            0,
+            1
+        );
+} else {
+    powerPercentage =
+        Phaser.Math.Clamp(
+            (
+                targetDistance - 41
+            ) /
+            (
+                62 - 41
+            ),
+            0,
+            1
+        );
+}
 
     const minimumSpeed = 120;
 
