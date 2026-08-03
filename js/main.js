@@ -890,6 +890,18 @@ this.aiMinimumDecisionTime = 650;
 this.aiMaximumHoldTime = 1500;
 this.aiDisposalCompleted = false;
 
+/*
+ * Team support and pressure settings.
+ */
+this.pressureDistance = 72;
+this.strongPressureDistance = 38;
+
+this.pressureSpeedMultiplier = 0.88;
+this.strongPressureSpeedMultiplier = 0.74;
+
+this.shepherdDistance = 48;
+this.shepherdSlowMultiplier = 0.72;
+
     // Drag aiming
     this.isAimingPass = false;
     this.aimPointerId = null;
@@ -2303,9 +2315,18 @@ const currentMaximumSpeed =
         ? this.ballCarrierSpeed
         : this.playerSpeed;
 
+/*
+ * Nearby defensive pressure slightly reduces the
+ * home ball carrier's effective movement speed.
+ */
+const pressureMovementMultiplier =
+    this.controlledMovementPressureMultiplier ??
+    1;
+
 const targetSpeed =
     currentMaximumSpeed *
-    movementSpeedMultiplier;
+    movementSpeedMultiplier *
+    pressureMovementMultiplier;
 
 const targetVelocityX =
     inputDirection.x *
@@ -2397,6 +2418,7 @@ this.updateAutomaticBounce(
 this.keepPlayerInsideField();
 this.updateTeammateSupport(delta);
 this.updateOpponentChase(delta);
+this.updateTeamPressure();
 this.updateAIDisposal();
 this.updateFootballFlight(delta);
 this.updateFootballMarking();
@@ -2843,8 +2865,15 @@ updateOpponentChase(delta) {
  * Away-team ball carriers use the same calibrated
  * carrying speed as home players.
  */
+/*
+ * Combined home pressure slows Green while carrying.
+ */
 const carrySpeed =
-    this.ballCarrierSpeed;
+    this.ballCarrierSpeed *
+    (
+        this.opponentMovementMultiplier ??
+        1
+    );
 
         this.opponent.x +=
             carryDirection.x *
@@ -3015,9 +3044,17 @@ if (this.hasHomePossession()) {
 
     directionToTarget.normalize();
 
-    const maximumMovement =
-        this.opponentData.speed *
-        deltaSeconds;
+/*
+ * A nearby supporting player can shepherd Green and
+ * temporarily reduce his defensive movement.
+ */
+const maximumMovement =
+    this.opponentData.speed *
+    (
+        this.opponentMovementMultiplier ??
+        1
+    ) *
+    deltaSeconds;
 
     const movementDistance =
         Math.min(
@@ -3279,6 +3316,126 @@ this.keepObjectInsideField(
 );
 }
 
+updateTeamPressure() {
+    /*
+     * Reset pressure values every frame.
+     */
+    this.homePressureOnOpponent = 0;
+    this.awayPressureOnCarrier = 0;
+
+    this.opponentMovementMultiplier = 1;
+    this.controlledMovementPressureMultiplier = 1;
+
+    /*
+     * Green applies pressure to the home ball carrier.
+     */
+    if (this.hasHomePossession()) {
+        const distanceToCarrier =
+            Phaser.Math.Distance.Between(
+                this.opponent.x,
+                this.opponent.y,
+                this.possessionOwner.x,
+                this.possessionOwner.y
+            );
+
+        if (
+            distanceToCarrier <=
+            this.strongPressureDistance
+        ) {
+            this.awayPressureOnCarrier = 2;
+
+            this.controlledMovementPressureMultiplier =
+                this.strongPressureSpeedMultiplier;
+        } else if (
+            distanceToCarrier <=
+            this.pressureDistance
+        ) {
+            this.awayPressureOnCarrier = 1;
+
+            this.controlledMovementPressureMultiplier =
+                this.pressureSpeedMultiplier;
+        }
+
+        /*
+         * The supporting home player can shepherd Green
+         * when positioned close to the contest.
+         */
+        const distanceFromSupportToGreen =
+            Phaser.Math.Distance.Between(
+                this.supportPlayer.x,
+                this.supportPlayer.y,
+                this.opponent.x,
+                this.opponent.y
+            );
+
+        const supportIsNearCarrier =
+            Phaser.Math.Distance.Between(
+                this.supportPlayer.x,
+                this.supportPlayer.y,
+                this.possessionOwner.x,
+                this.possessionOwner.y
+            ) <= this.shepherdDistance + 28;
+
+        if (
+            distanceFromSupportToGreen <=
+                this.shepherdDistance &&
+            supportIsNearCarrier
+        ) {
+            this.opponentMovementMultiplier =
+                this.shepherdSlowMultiplier;
+        }
+    }
+
+    /*
+     * Red and Blue combine pressure when Green has
+     * possession.
+     */
+    if (this.hasAwayPossession()) {
+        const controlledDistance =
+            Phaser.Math.Distance.Between(
+                this.controlledPlayer.x,
+                this.controlledPlayer.y,
+                this.opponent.x,
+                this.opponent.y
+            );
+
+        const supportDistance =
+            Phaser.Math.Distance.Between(
+                this.supportPlayer.x,
+                this.supportPlayer.y,
+                this.opponent.x,
+                this.opponent.y
+            );
+
+        let nearbyHomeDefenders = 0;
+
+        if (
+            controlledDistance <=
+            this.pressureDistance
+        ) {
+            nearbyHomeDefenders++;
+        }
+
+        if (
+            supportDistance <=
+            this.pressureDistance
+        ) {
+            nearbyHomeDefenders++;
+        }
+
+        this.homePressureOnOpponent =
+            nearbyHomeDefenders;
+
+        if (nearbyHomeDefenders >= 2) {
+            this.opponentMovementMultiplier =
+                this.strongPressureSpeedMultiplier;
+        } else if (nearbyHomeDefenders === 1) {
+            this.opponentMovementMultiplier =
+                this.pressureSpeedMultiplier;
+        }
+    }
+}
+
 updateAIDisposal() {
     if (!this.hasAwayPossession()) {
         return;
@@ -3321,11 +3478,20 @@ updateAIDisposal() {
     /*
      * Green disposes earlier when under pressure.
      */
-    const underStrongPressure =
-        nearestDefenderDistance <= 55;
+/*
+ * Use both distance and combined team pressure when
+ * deciding how quickly Green should dispose.
+ */
+const combinedHomePressure =
+    this.homePressureOnOpponent ?? 0;
 
-    const underModeratePressure =
-        nearestDefenderDistance <= 95;
+const underStrongPressure =
+    nearestDefenderDistance <= 55 ||
+    combinedHomePressure >= 2;
+
+const underModeratePressure =
+    nearestDefenderDistance <= 95 ||
+    combinedHomePressure >= 1;
 
     const decisionTime =
         underStrongPressure
