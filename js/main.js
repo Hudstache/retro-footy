@@ -187,7 +187,20 @@ createPlayer() {
  * 15 metres in 2.4 seconds
  * 50 metres in 7 seconds
  */
+/*
+ * Off-ball maximum running speed.
+ */
 this.playerSpeed = 31.5;
+
+/*
+ * Ball carriers move more slowly so defenders can
+ * close space and complete tackles.
+ *
+ * A defender starting 15 metres behind should catch
+ * the carrier after approximately 30 metres.
+ */
+this.ballCarrierSpeed = 21;
+
 this.playerAcceleration = 37;
 this.playerDeceleration = 50;
 
@@ -1925,8 +1938,21 @@ if (
         this.tackleMovementMultiplier;
 }
 
+/*
+ * The controlled player runs more slowly while
+ * carrying the football.
+ */
+const controlledPlayerHasBall =
+    this.possessionOwner ===
+    this.controlledPlayer;
+
+const currentMaximumSpeed =
+    controlledPlayerHasBall
+        ? this.ballCarrierSpeed
+        : this.playerSpeed;
+
 const targetSpeed =
-    this.playerSpeed *
+    currentMaximumSpeed *
     movementSpeedMultiplier;
 
 const targetVelocityX =
@@ -2337,7 +2363,12 @@ updateOpponentChase(delta) {
             carryDirection.normalize();
         }
 
-        const carrySpeed = 30;
+/*
+ * Away-team ball carriers use the same calibrated
+ * carrying speed as home players.
+ */
+const carrySpeed =
+    this.ballCarrierSpeed;
 
         this.opponent.x +=
             carryDirection.x *
