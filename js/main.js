@@ -1587,12 +1587,7 @@ drawPassAim() {
          * This represents the intended path without
          * guaranteeing perfect accuracy.
          */
-        const dotAlpha =
-            Phaser.Math.Linear(
-                1,
-                0.45,
-                progress
-            );
+const dotAlpha = 1;
 
         /*
          * Make the middle dots slightly larger to
@@ -1604,9 +1599,11 @@ drawPassAim() {
                 Math.PI
             );
 
-        const dotRadius =
-            2.5 +
-            heightCurve * 1.5;
+/*
+ * Keep trajectory dots small and consistent.
+ */
+const dotRadius =
+    isKick ? 2 : 1.8;
 
         this.aimGraphics.fillStyle(
             trajectoryColour,
@@ -1619,22 +1616,6 @@ drawPassAim() {
             dotRadius
         );
     }
-
-    /*
-     * Draw a small target marker at the intended
-     * landing position.
-     */
-    this.aimGraphics.lineStyle(
-        2,
-        trajectoryColour,
-        0.75
-    );
-
-    this.aimGraphics.strokeCircle(
-        endX,
-        endY,
-        7
-    );
 
     if (
         horizontalDrag <
