@@ -841,6 +841,13 @@ this.pushInBackChance = 0.03;
 this.currentTackleIsPushInBack = false;
 
 /*
+ * Free-kick restart protection.
+ */
+this.freeKickProtectedPlayer = null;
+this.freeKickProtectionTimer = 0;
+this.freeKickProtectionDuration = 900;
+
+/*
  * Tacklers briefly recover after completing or
  * cancelling a tackle.
  */
@@ -1992,6 +1999,21 @@ if (this.isTackleActive) {
      * Transfer possession from the player to the
      * travelling football.
      */
+
+    /*
+ * Disposing of the football ends any remaining
+ * free-kick protection.
+ */
+if (
+    this.freeKickProtectedPlayer ===
+    this.controlledPlayer
+) {
+    this.freeKickProtectedPlayer =
+        null;
+
+    this.freeKickProtectionTimer = 0;
+}
+
 /*
  * Remember who disposed of the football.
  *
@@ -2258,8 +2280,32 @@ if (!this.controlledPlayer) {
 }
 
 /*
+ * Count down free-kick protection.
+ */
+
+if (this.freeKickProtectionTimer > 0) {
+    this.freeKickProtectionTimer =
+        Math.max(
+            0,
+            this.freeKickProtectionTimer - delta
+        );
+
+    if (
+        this.freeKickProtectionTimer === 0
+    ) {
+        this.freeKickProtectedPlayer =
+            null;
+
+        console.log(
+            "Free-kick protection ended."
+        );
+    }
+}
+
+/*
  * Count down the current tackle-fatigue period.
  */
+
 if (this.tackleFatigueTimer > 0) {
     this.tackleFatigueTimer =
         Math.max(
@@ -3718,6 +3764,19 @@ launchAIFootball(
     const disposingPlayer =
         this.opponent;
 
+        /*
+ * An AI disposal ends Green's free-kick protection.
+ */
+if (
+    this.freeKickProtectedPlayer ===
+    disposingPlayer
+) {
+    this.freeKickProtectedPlayer =
+        null;
+
+    this.freeKickProtectionTimer = 0;
+}
+
     /*
      * Use a medium-strength kick or handball for this
      * first AI disposal prototype.
@@ -4599,6 +4658,15 @@ startOutOnFullFreeKick(
             this.setPossessionOwner(
                 freeKickReceiver
             );
+
+            /*
+ * Protect the free-kick receiver after play resumes.
+ */
+this.freeKickProtectedPlayer =
+    freeKickReceiver;
+
+this.freeKickProtectionTimer =
+    this.freeKickProtectionDuration;
 
             this.updateControlledPlayerIndicator();
 
@@ -6173,6 +6241,22 @@ updateTackleDetection(delta) {
         return;
     }
 
+    /*
+ * The player receiving a free kick cannot be tackled
+ * during the brief protected restart period.
+ */
+if (
+    this.freeKickProtectedPlayer ===
+        this.possessionOwner &&
+    this.freeKickProtectionTimer > 0
+) {
+    this.isTackleActive = false;
+    this.tackleTimer = 0;
+    this.activeTackler = null;
+
+    return;
+}
+
     let defender = null;
 
     if (this.hasAwayPossession()) {
@@ -6497,6 +6581,16 @@ startHighTackleFreeKick(
         freeKickReceiver
     );
 
+    /*
+ * Protect the infringed player from an immediate
+ * repeat tackle.
+ */
+this.freeKickProtectedPlayer =
+    freeKickReceiver;
+
+this.freeKickProtectionTimer =
+    this.freeKickProtectionDuration;
+
     this.resetTouchMovement();
     this.cancelPassAim();
 
@@ -6595,6 +6689,16 @@ startPushInBackFreeKick(
     this.setPossessionOwner(
         freeKickReceiver
     );
+
+    /*
+ * Protect the infringed player from an immediate
+ * repeat tackle.
+ */
+this.freeKickProtectedPlayer =
+    freeKickReceiver;
+
+this.freeKickProtectionTimer =
+    this.freeKickProtectionDuration;
 
     this.resetTouchMovement();
     this.cancelPassAim();
