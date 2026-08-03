@@ -824,7 +824,10 @@ this.activeTackler = null;
  * A tackler whose centre is sufficiently above the
  * carrier's centre is treated as making high contact.
  */
-this.highTackleVerticalThreshold = 9;
+/*
+ * Every tackle has a 5% chance of being ruled high.
+ */
+this.highTackleChance = 0.05;
 this.currentTackleIsHigh = false;
 
 /*
@@ -6223,13 +6226,17 @@ if (!this.isTackleActive) {
      * positioned too far above the carrier represents
      * contact above the legal tackling zone.
      */
-    const tackleVerticalDifference =
-        defender.y -
-        this.possessionOwner.y;
-
-    this.currentTackleIsHigh =
-        tackleVerticalDifference <=
-        -this.highTackleVerticalThreshold;
+/*
+ * Roll once when the tackle begins.
+ *
+ * Phaser.Math.FloatBetween() returns a value between
+ * 0 and 1. Values below 0.05 represent a 5% chance.
+ */
+this.currentTackleIsHigh =
+    Phaser.Math.FloatBetween(
+        0,
+        1
+    ) < this.highTackleChance;
 
     if (this.currentTackleIsHigh) {
         const infringedCarrier =
