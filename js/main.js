@@ -1432,16 +1432,15 @@ drawPassAim() {
     }
 
     const dragX =
-        this.aimCurrentX - this.aimStartX;
+        this.aimCurrentX -
+        this.aimStartX;
 
     const dragY =
-        this.aimCurrentY - this.aimStartY;
+        this.aimCurrentY -
+        this.aimStartY;
 
     /*
-     * Horizontal drag controls power.
-     *
-     * Absolute value lets us test dragging either left or
-     * right during this early prototype.
+     * Horizontal drag controls disposal power.
      */
     const horizontalDrag =
         Phaser.Math.Clamp(
@@ -1451,73 +1450,207 @@ drawPassAim() {
         );
 
     /*
-     * Vertical direction is inverted:
+     * Vertical aiming remains inverted:
      *
-     * Drag down = ball aims up
-     * Drag up   = ball aims down
+     * Drag down = aim upward
+     * Drag up   = aim downward
      */
-    const aimedVerticalOffset = -dragY;
-
-    const previewLength =
-        Phaser.Math.Linear(
-            35,
-            170,
-            horizontalDrag / this.maximumPassDrag
-        );
-
-const previewEndX =
-    this.controlledPlayer.x +
-    previewLength;
-
-const previewEndY =
-    this.controlledPlayer.y +
-    Phaser.Math.Clamp(
-        aimedVerticalOffset,
-        -100,
-        100
-    );
+    const aimedVerticalOffset =
+        -dragY;
 
     const isKick =
-        horizontalDrag >= this.handballKickThreshold;
-
-    const lineColour =
-        isKick ? 0xffd43b : 0x66d9ff;
-
-    this.aimGraphics.lineStyle(
-        3,
-        lineColour,
-        1
-    );
-
-    this.aimGraphics.beginPath();
-
-this.aimGraphics.moveTo(
-    this.controlledPlayer.x,
-    this.controlledPlayer.y
-);
-
-    this.aimGraphics.lineTo(
-        previewEndX,
-        previewEndY
-    );
-
-    this.aimGraphics.strokePath();
+        horizontalDrag >=
+        this.handballKickThreshold;
 
     /*
-     * Draw a small target marker.
+     * Preview distance grows with disposal power.
+     *
+     * Step 16C.2 will calibrate this more precisely
+     * against the real football flight.
      */
+    const previewLength =
+        Phaser.Math.Linear(
+            isKick ? 60 : 35,
+            isKick ? 270 : 62,
+            horizontalDrag /
+                this.maximumPassDrag
+        );
+
+    const startX =
+        this.controlledPlayer.x + 10;
+
+    const startY =
+        this.controlledPlayer.y;
+
+    const endX =
+        this.controlledPlayer.x +
+        previewLength;
+
+    const endY =
+        this.controlledPlayer.y +
+        Phaser.Math.Clamp(
+            aimedVerticalOffset,
+            -120,
+            120
+        );
+
+    /*
+     * A quadratic curve uses one control point between
+     * the kicker and target.
+     *
+     * Moving the control point upward creates the
+     * visible football-flight arc.
+     */
+    const controlX =
+        Phaser.Math.Linear(
+            startX,
+            endX,
+            0.5
+        );
+
+    const arcHeight =
+        isKick
+            ? Phaser.Math.Linear(
+                28,
+                72,
+                horizontalDrag /
+                    this.maximumPassDrag
+            )
+            : 18;
+
+    const controlY =
+        Phaser.Math.Linear(
+            startY,
+            endY,
+            0.5
+        ) -
+        arcHeight;
+
+    /*
+     * Kicks use more dots because they travel farther.
+     */
+    const dotCount =
+        isKick ? 14 : 8;
+
+    const trajectoryColour =
+        isKick
+            ? 0xffffff
+            : 0x66d9ff;
+
+    /*
+     * Draw individual points along the curved path.
+     */
+    for (
+        let dotIndex = 1;
+        dotIndex <= dotCount;
+        dotIndex++
+    ) {
+        const progress =
+            dotIndex /
+            dotCount;
+
+        const inverseProgress =
+            1 - progress;
+
+        /*
+         * Quadratic Bézier curve:
+         *
+         * start → control point → end
+         */
+        const dotX =
+            inverseProgress *
+                inverseProgress *
+                startX +
+            2 *
+                inverseProgress *
+                progress *
+                controlX +
+            progress *
+                progress *
+                endX;
+
+        const dotY =
+            inverseProgress *
+                inverseProgress *
+                startY +
+            2 *
+                inverseProgress *
+                progress *
+                controlY +
+            progress *
+                progress *
+                endY;
+
+        /*
+         * Fade the final few dots slightly.
+         *
+         * This represents the intended path without
+         * guaranteeing perfect accuracy.
+         */
+        const dotAlpha =
+            Phaser.Math.Linear(
+                1,
+                0.45,
+                progress
+            );
+
+        /*
+         * Make the middle dots slightly larger to
+         * suggest the ball reaching its highest point.
+         */
+        const heightCurve =
+            Math.sin(
+                progress *
+                Math.PI
+            );
+
+        const dotRadius =
+            2.5 +
+            heightCurve * 1.5;
+
+        this.aimGraphics.fillStyle(
+            trajectoryColour,
+            dotAlpha
+        );
+
+        this.aimGraphics.fillCircle(
+            dotX,
+            dotY,
+            dotRadius
+        );
+    }
+
+    /*
+     * Draw a small target marker at the intended
+     * landing position.
+     */
+    this.aimGraphics.lineStyle(
+        2,
+        trajectoryColour,
+        0.75
+    );
+
     this.aimGraphics.strokeCircle(
-        previewEndX,
-        previewEndY,
+        endX,
+        endY,
         7
     );
 
-    if (horizontalDrag < this.minimumPassDrag) {
-        this.passTypeText.setText("DRAG TO PASS");
+    if (
+        horizontalDrag <
+        this.minimumPassDrag
+    ) {
+        this.passTypeText.setText(
+            "DRAG TO PASS"
+        );
     } else if (isKick) {
-        this.passTypeText.setText("KICK");
+        this.passTypeText.setText(
+            "KICK"
+        );
     } else {
-        this.passTypeText.setText("HANDBALL");
+        this.passTypeText.setText(
+            "HANDBALL"
+        );
     }
 }
 
