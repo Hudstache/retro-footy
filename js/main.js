@@ -639,7 +639,28 @@ this.football = this.add.ellipse(
         0x9a5a2b
     );
 
-    this.football.setStrokeStyle(2, 0xffffff);
+this.football.setStrokeStyle(
+    2,
+    0xffffff
+);
+
+this.football.setDepth(11);
+
+/*
+ * A ground shadow makes the football's visual height
+ * easier to read during kicks and handballs.
+ */
+this.footballShadow =
+    this.add.ellipse(
+        this.football.x,
+        this.football.y + 5,
+        12,
+        5,
+        0x000000,
+        0.3
+    )
+    .setDepth(10)
+    .setVisible(false);
 
     // Possession
 /*
@@ -708,6 +729,14 @@ this.footballRotationSpeed = 0;
  * in later steps.
  */
 this.footballFlightTime = 0;
+
+/*
+ * Estimated duration of the current disposal.
+ *
+ * This is used only for visual height and trajectory
+ * calibration.
+ */
+this.footballEstimatedFlightDuration = 0;
 
 /*
  * Ground-ball movement states:
@@ -1468,31 +1497,110 @@ drawPassAim() {
      * Step 16C.2 will calibrate this more precisely
      * against the real football flight.
      */
-    const previewLength =
-        Phaser.Math.Linear(
-            isKick ? 60 : 35,
-            isKick ? 270 : 62,
-            horizontalDrag /
-                this.maximumPassDrag
+/*
+ * Use the same separated power ranges as the real
+ * disposal code.
+ */
+let previewPowerPercentage;
+
+if (isKick) {
+    previewPowerPercentage =
+        Phaser.Math.Clamp(
+            (
+                horizontalDrag -
+                this.handballKickThreshold
+            ) /
+            (
+                this.maximumPassDrag -
+                this.handballKickThreshold
+            ),
+            0,
+            1
         );
+} else {
+    previewPowerPercentage =
+        Phaser.Math.Clamp(
+            (
+                horizontalDrag -
+                this.minimumPassDrag
+            ) /
+            (
+                this.handballKickThreshold -
+                this.minimumPassDrag
+            ),
+            0,
+            1
+        );
+}
 
-    const startX =
-        this.controlledPlayer.x + 10;
+/*
+ * These must match launchFootball().
+ */
+const previewMinimumSpeed =
+    120;
 
-    const startY =
-        this.controlledPlayer.y;
+const previewMaximumSpeed =
+    isKick ? 380 : 165;
 
-    const endX =
-        this.controlledPlayer.x +
+const previewLaunchSpeed =
+    Phaser.Math.Linear(
+        previewMinimumSpeed,
+        previewMaximumSpeed,
+        previewPowerPercentage
+    );
+
+const previewDragPerSecond =
+    isKick ? 1.25 : 2.15;
+
+const previewStoppingSpeed =
+    isKick ? 42 : 32;
+
+/*
+ * With exponential drag, the distance travelled before
+ * reaching the stopping speed is:
+ *
+ * (initial speed - stopping speed) / drag
+ */
+const previewLength =
+    Math.max(
+        0,
+        (
+            previewLaunchSpeed -
+            previewStoppingSpeed
+        ) /
+        previewDragPerSecond
+    );
+
+const previewVerticalDirection =
+    Phaser.Math.Clamp(
+        aimedVerticalOffset / 100,
+        -1,
+        1
+    );
+
+const previewDirection =
+    new Phaser.Math.Vector2(
+        1,
+        previewVerticalDirection
+    );
+
+previewDirection.normalize();
+
+const startX =
+    this.controlledPlayer.x + 10;
+
+const startY =
+    this.controlledPlayer.y;
+
+const endX =
+    startX +
+    previewDirection.x *
         previewLength;
 
-    const endY =
-        this.controlledPlayer.y +
-        Phaser.Math.Clamp(
-            aimedVerticalOffset,
-            -120,
-            120
-        );
+const endY =
+    startY +
+    previewDirection.y *
+        previewLength;
 
     /*
      * A quadratic curve uses one control point between
@@ -1508,15 +1616,21 @@ drawPassAim() {
             0.5
         );
 
-    const arcHeight =
-        isKick
-            ? Phaser.Math.Linear(
-                28,
-                72,
-                horizontalDrag /
-                    this.maximumPassDrag
-            )
-            : 18;
+/*
+ * Stronger disposals receive a higher visual arc.
+ */
+const arcHeight =
+    isKick
+        ? Phaser.Math.Linear(
+            22,
+            62,
+            previewPowerPercentage
+        )
+        : Phaser.Math.Linear(
+            10,
+            18,
+            previewPowerPercentage
+        );
 
     const controlY =
         Phaser.Math.Linear(
@@ -1847,6 +1961,23 @@ const maximumSpeed =
             powerPercentage
         );
 
+        /*
+ * Estimate when the football will slow to the point
+ * where ground-bounce physics begins.
+ */
+const flightDragPerSecond =
+    isKick ? 1.25 : 2.15;
+
+const flightStoppingSpeed =
+    isKick ? 42 : 32;
+
+this.footballEstimatedFlightDuration =
+    Math.log(
+        launchSpeed /
+        flightStoppingSpeed
+    ) /
+    flightDragPerSecond;
+
     /*
      * Retro Footy currently attacks toward the right.
      *
@@ -1939,6 +2070,17 @@ this.footballRotationSpeed =
         this.footballBaseScaleX,
         this.footballBaseScaleY
     );
+
+    if (this.footballShadow) {
+    this.footballShadow
+        .setPosition(
+            this.football.x,
+            this.football.y + 5
+        )
+        .setScale(1)
+        .setAlpha(0.3)
+        .setVisible(true);
+}
 
     /*
      * Use the outline to show the current disposal.
@@ -3692,46 +3834,79 @@ this.footballCanBeMarked =
     this.footballRotationSpeed *=
         rotationDragMultiplier;
 
-    /*
-     * Give the flight a subtle visual height effect.
-     *
-     * The ball grows slightly and then returns toward
-     * normal size as it slows.
-     *
-     * This is purely visual and does not change the
-     * football's actual field position.
-     */
-    const flightPulseSpeed =
-        this.footballFlightType === "KICK"
-            ? 5
-            : 7;
-
-    const maximumScaleIncrease =
-        this.footballFlightType === "KICK"
-            ? 0.18
-            : 0.10;
-
-    const flightPulse =
-        Math.max(
+   /*
+ * Convert flight time into progress from:
+ *
+ * 0 = launch
+ * 0.5 = apex
+ * 1 = landing
+ */
+const flightProgress =
+    this.footballEstimatedFlightDuration > 0
+        ? Phaser.Math.Clamp(
+            this.footballFlightTime /
+                this.footballEstimatedFlightDuration,
             0,
-            Math.sin(
-                this.footballFlightTime *
-                flightPulseSpeed
-            )
-        );
+            1
+        )
+        : 0;
 
-    const flightScale =
-        1 +
-        flightPulse *
+const flightHeightCurve =
+    Math.sin(
+        flightProgress *
+        Math.PI
+    );
+
+const maximumScaleIncrease =
+    this.footballFlightType === "KICK"
+        ? 0.24
+        : 0.13;
+
+const flightScale =
+    1 +
+    flightHeightCurve *
         maximumScaleIncrease;
 
-    this.football.setScale(
-        this.footballBaseScaleX *
-            flightScale,
+this.football.setScale(
+    this.footballBaseScaleX *
+        flightScale,
 
-        this.footballBaseScaleY *
-            flightScale
-    );
+    this.footballBaseScaleY *
+        flightScale
+);
+
+/*
+ * Keep the shadow on the football's ground position.
+ *
+ * It becomes smaller and lighter near the apex.
+ */
+if (this.footballShadow) {
+    const shadowScaleX =
+        1 -
+        flightHeightCurve * 0.38;
+
+    const shadowScaleY =
+        1 -
+        flightHeightCurve * 0.25;
+
+    const shadowAlpha =
+        0.3 -
+        flightHeightCurve * 0.14;
+
+    this.footballShadow
+        .setPosition(
+            this.football.x,
+            this.football.y + 5
+        )
+        .setScale(
+            shadowScaleX,
+            shadowScaleY
+        )
+        .setAlpha(
+            shadowAlpha
+        )
+        .setVisible(true);
+}
 
     const currentSpeed =
         Math.sqrt(
@@ -4219,6 +4394,20 @@ startFootballGroundBounce() {
     this.footballInFlight = false;
     this.footballGroundState = "BOUNCING";
 
+    /*
+ * The football has returned to ground level.
+ */
+if (this.footballShadow) {
+    this.footballShadow.setVisible(
+        false
+    );
+}
+
+this.football.setScale(
+    this.footballBaseScaleX,
+    this.footballBaseScaleY
+);
+
     this.footballBounceCount = 0;
     this.footballGroundBounceTimer = 0;
 
@@ -4518,6 +4707,21 @@ updateFootballRolling(deltaSeconds) {
 stopFootballFlight() {
     this.footballInFlight = false;
     this.footballGroundState = "NONE";
+
+    this.footballEstimatedFlightDuration = 0;
+
+if (this.footballShadow) {
+    this.footballShadow.setVisible(
+        false
+    );
+}
+
+if (this.football) {
+    this.football.setScale(
+        this.footballBaseScaleX,
+        this.footballBaseScaleY
+    );
+}
 
     this.footballVelocityX = 0;
     this.footballVelocityY = 0;
