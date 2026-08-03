@@ -180,13 +180,16 @@ createPlayer() {
         0xffffff
     );
 
-this.playerSpeed = 170;
-
 /*
- * Smooth movement settings.
+ * Calibrated AFL running movement.
+ *
+ * These values produce approximately:
+ * 15 metres in 2.4 seconds
+ * 50 metres in 7 seconds
  */
-this.playerAcceleration = 620;
-this.playerDeceleration = 760;
+this.playerSpeed = 31.5;
+this.playerAcceleration = 37;
+this.playerDeceleration = 50;
 
 /*
  * Each home player stores their own movement velocity
@@ -223,7 +226,7 @@ this.teammate = this.add.rectangle(
 this.teammateData = {
     team: "home",
     state: "SUPPORT",
-    speed: 145,
+speed: 30,
     targetX: this.teammate.x,
     targetY: this.teammate.y,
     hasBall: false
@@ -566,7 +569,7 @@ this.opponent = this.add.rectangle(
 this.opponentData = {
     team: "away",
     state: "CHASE",
-    speed: 135,
+speed: 30,
     targetX: this.opponent.x,
     targetY: this.opponent.y,
     hasBall: false
@@ -748,7 +751,11 @@ this.isTackleActive = false;
  * Players remain engaged briefly once a tackle begins.
  */
 this.tackleTimer = 0;
-this.tackleDuration = 350;
+/*
+ * A tackle with prior opportunity is resolved after
+ * approximately 0.45 seconds.
+ */
+this.tackleDuration = 450;
 
 /*
  * The ball carrier can continue driving their legs,
@@ -1644,13 +1651,44 @@ this.footballCanBeMarked = false;
      * Convert the horizontal drag into a value
      * between 0 and 1.
      */
-    const powerPercentage =
+/*
+ * Kicks and handballs use separate power ranges.
+ *
+ * This lets the shortest kick begin near 15 metres
+ * while handballs remain within approximately
+ * 10–15 metres.
+ */
+let powerPercentage;
+
+if (isKick) {
+    powerPercentage =
         Phaser.Math.Clamp(
-            horizontalDrag /
-                this.maximumPassDrag,
+            (
+                horizontalDrag -
+                this.handballKickThreshold
+            ) /
+            (
+                this.maximumPassDrag -
+                this.handballKickThreshold
+            ),
             0,
             1
         );
+} else {
+    powerPercentage =
+        Phaser.Math.Clamp(
+            (
+                horizontalDrag -
+                this.minimumPassDrag
+            ) /
+            (
+                this.handballKickThreshold -
+                this.minimumPassDrag
+            ),
+            0,
+            1
+        );
+}
 
     /*
      * Kicks travel faster and farther.
@@ -1658,11 +1696,22 @@ this.footballCanBeMarked = false;
      * Handballs leave the player more slowly and
      * lose speed sooner.
      */
-    const minimumSpeed =
-        isKick ? 270 : 165;
+/*
+ * Calibrated disposal ranges:
+ *
+ * Kick:
+ * minimum approximately 15 metres
+ * average approximately 42 metres
+ * maximum approximately 65 metres
+ *
+ * Handball:
+ * approximately 10–15 metres
+ */
+const minimumSpeed =
+    isKick ? 120 : 120;
 
-    const maximumSpeed =
-        isKick ? 520 : 285;
+const maximumSpeed =
+    isKick ? 380 : 165;
 
     const launchSpeed =
         Phaser.Math.Linear(
@@ -1690,7 +1739,7 @@ let verticalDirection =
  * Disposals made during a tackle receive a small
  * random accuracy penalty.
  */
-if (this.isTackleActive) {
+if (disposalWasPressured) {
     const maximumPressureError =
         isKick ? 0.32 : 0.22;
 
@@ -2108,7 +2157,7 @@ if (
          * Blue moves slightly faster when contesting
          * a loose football than during normal support.
          */
-        const looseBallChaseSpeed = 155;
+        const looseBallChaseSpeed = 31.5;
 
         const maximumMovement =
             looseBallChaseSpeed *
@@ -2288,7 +2337,7 @@ updateOpponentChase(delta) {
             carryDirection.normalize();
         }
 
-        const carrySpeed = 118;
+        const carrySpeed = 30;
 
         this.opponent.x +=
             carryDirection.x *
@@ -2533,7 +2582,7 @@ if (this.footballInFlight) {
      * Green moves faster when reading an airborne kick
      * than during normal defensive positioning.
      */
-    const interceptionSpeed = 140;
+    const interceptionSpeed = 31.5;
 
     const maximumMovement =
         interceptionSpeed *
@@ -2609,7 +2658,7 @@ directionToFootball.normalize();
  * Green moves faster when attacking a loose football
  * than he does during normal defensive pressure.
  */
-const looseBallChaseSpeed = 145;
+const looseBallChaseSpeed = 31.5;
 
 const maximumMovement =
     looseBallChaseSpeed *
