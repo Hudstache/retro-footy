@@ -1651,6 +1651,38 @@ const arcHeight =
             ? 0xffffff
             : 0x66d9ff;
 
+            /*
+ * Determine how uncertain the disposal should appear.
+ *
+ * Stationary and unpressured disposals remain precise.
+ */
+const carrierMovementSpeed =
+    Math.sqrt(
+        this.controlledPlayer
+            .movementVelocityX ** 2 +
+
+        this.controlledPlayer
+            .movementVelocityY ** 2
+    );
+
+const previewWasMoving =
+    carrierMovementSpeed > 5;
+
+const previewWasPressured =
+    this.isTackleActive;
+
+let trajectoryUncertainty = 0;
+
+if (previewWasMoving) {
+    trajectoryUncertainty +=
+        isKick ? 5 : 3;
+}
+
+if (previewWasPressured) {
+    trajectoryUncertainty +=
+        isKick ? 10 : 7;
+}
+
     /*
      * Draw individual points along the curved path.
      */
@@ -1724,11 +1756,87 @@ const dotRadius =
             dotAlpha
         );
 
-        this.aimGraphics.fillCircle(
-            dotX,
-            dotY,
-            dotRadius
+this.aimGraphics.fillCircle(
+    dotX,
+    dotY,
+    dotRadius
+);
+
+/*
+ * During uncertain disposals, split the final section
+ * into two possible paths.
+ *
+ * The dots remain fully visible and no landing circle
+ * is used.
+ */
+if (
+    trajectoryUncertainty > 0 &&
+    progress >= 0.65
+) {
+    const uncertaintyProgress =
+        Phaser.Math.Clamp(
+            (
+                progress - 0.65
+            ) /
+            0.35,
+            0,
+            1
         );
+
+    const spreadDistance =
+        trajectoryUncertainty *
+        uncertaintyProgress;
+
+    /*
+     * Calculate a direction perpendicular to the
+     * intended disposal path.
+     */
+    const pathDirection =
+        new Phaser.Math.Vector2(
+            endX - startX,
+            endY - startY
+        );
+
+    if (pathDirection.length() > 0) {
+        pathDirection.normalize();
+    }
+
+    const perpendicularX =
+        -pathDirection.y;
+
+    const perpendicularY =
+        pathDirection.x;
+
+    const uncertaintyDotRadius =
+        Math.max(
+            1.2,
+            dotRadius - 0.6
+        );
+
+    this.aimGraphics.fillCircle(
+        dotX +
+            perpendicularX *
+            spreadDistance,
+
+        dotY +
+            perpendicularY *
+            spreadDistance,
+
+        uncertaintyDotRadius
+    );
+
+    this.aimGraphics.fillCircle(
+        dotX -
+            perpendicularX *
+            spreadDistance,
+
+        dotY -
+            perpendicularY *
+            spreadDistance,
+
+        uncertaintyDotRadius
+    );
+}
     }
 
     if (
@@ -1821,6 +1929,13 @@ if (
  */
 const disposalWasPressured =
     this.isTackleActive;
+
+/*
+ * Record whether the player was moving before
+ * possession and tackle states are cleared.
+ */
+const disposalWasMoving =
+    this.playerIsMoving;
 
 if (this.isTackleActive) {
     /*
@@ -1994,17 +2109,26 @@ let verticalDirection =
     );
 
 /*
- * Disposals made during a tackle receive a small
- * random accuracy penalty.
+ * Calculate disposal inaccuracy from movement and
+ * tackling pressure.
  */
-if (disposalWasPressured) {
-    const maximumPressureError =
-        isKick ? 0.32 : 0.22;
+let maximumAccuracyError = 0;
 
+if (disposalWasMoving) {
+    maximumAccuracyError +=
+        isKick ? 0.10 : 0.06;
+}
+
+if (disposalWasPressured) {
+    maximumAccuracyError +=
+        isKick ? 0.32 : 0.22;
+}
+
+if (maximumAccuracyError > 0) {
     verticalDirection +=
         Phaser.Math.FloatBetween(
-            -maximumPressureError,
-            maximumPressureError
+            -maximumAccuracyError,
+            maximumAccuracyError
         );
 
     verticalDirection =
