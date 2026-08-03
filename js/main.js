@@ -907,6 +907,23 @@ this.awayGoals = 0;
 this.awayBehinds = 0;
 
 /*
+ * Match and quarter structure.
+ *
+ * Four 90-second quarters produce approximately
+ * six minutes of active match time.
+ */
+this.currentQuarter = 1;
+
+this.quarterDuration = 90 * 1000;
+this.quarterTimeRemaining =
+    this.quarterDuration;
+
+this.quarterBreakDuration = 2200;
+
+this.quarterBreakActive = false;
+this.matchFinished = false;
+
+/*
  * Stoppage system.
  */
 this.stoppageActive = false;
@@ -2280,6 +2297,25 @@ if (!this.controlledPlayer) {
 }
 
 /*
+ * Update the match clock before normal gameplay.
+ */
+this.updateQuarterTimer(delta);
+
+/*
+ * Freeze gameplay during quarter breaks and after
+ * the final siren.
+ */
+if (
+    this.quarterBreakActive ||
+    this.matchFinished
+) {
+    this.updateCameraTarget();
+    this.updateControlledPlayerIndicator();
+
+    return;
+}
+
+/*
  * Count down free-kick protection.
  */
 
@@ -2527,6 +2563,232 @@ if (!this.stoppageActive) {
  */
 this.updateCameraTarget();
 this.updateControlledPlayerIndicator();
+}
+
+updateQuarterTimer(delta) {
+    if (
+        this.matchFinished ||
+        this.quarterBreakActive
+    ) {
+        return;
+    }
+
+    this.quarterTimeRemaining =
+        Math.max(
+            0,
+            this.quarterTimeRemaining -
+                delta
+        );
+
+    this.updateQuarterDisplay();
+
+    if (
+        this.quarterTimeRemaining === 0
+    ) {
+        this.endQuarter();
+    }
+}
+
+updateQuarterDisplay() {
+    if (!this.quarterText) {
+        return;
+    }
+
+    const totalSeconds =
+        Math.ceil(
+            this.quarterTimeRemaining /
+                1000
+        );
+
+    const minutes =
+        Math.floor(
+            totalSeconds / 60
+        );
+
+    const seconds =
+        totalSeconds % 60;
+
+    const formattedSeconds =
+        String(seconds).padStart(
+            2,
+            "0"
+        );
+
+    this.quarterText.setText(
+        `Q${this.currentQuarter}   ${minutes}:${formattedSeconds}`
+    );
+}
+
+endQuarter() {
+    if (
+        this.quarterBreakActive ||
+        this.matchFinished
+    ) {
+        return;
+    }
+
+    /*
+     * Cancel the current passage of play.
+     */
+    this.clearPossession();
+    this.stopFootballFlight();
+
+    this.scoreDetected = false;
+    this.lastScoreResult = null;
+
+    this.stoppageActive = false;
+    this.stoppageType = null;
+    this.stoppageRestartScheduled =
+        false;
+
+    this.isTackleActive = false;
+    this.tackleTimer = 0;
+    this.activeTackler = null;
+
+    this.freeKickProtectedPlayer = null;
+    this.freeKickProtectionTimer = 0;
+
+    this.resetTouchMovement();
+    this.cancelPassAim();
+
+    /*
+     * The end of the fourth quarter is full time.
+     */
+    if (this.currentQuarter >= 4) {
+        this.finishMatch();
+        return;
+    }
+
+    this.quarterBreakActive = true;
+
+    this.passTypeText.setText(
+        `END OF Q${this.currentQuarter}`
+    );
+
+    if (this.quarterText) {
+        this.quarterText.setText(
+            `Q${this.currentQuarter}   0:00`
+        );
+    }
+
+    console.log(
+        `End of quarter ${this.currentQuarter}.`
+    );
+
+    this.time.delayedCall(
+        this.quarterBreakDuration,
+        () => {
+            this.startNextQuarter();
+        }
+    );
+}
+
+startNextQuarter() {
+    if (
+        !this.quarterBreakActive ||
+        this.matchFinished
+    ) {
+        return;
+    }
+
+    this.currentQuarter++;
+
+    this.quarterTimeRemaining =
+        this.quarterDuration;
+
+    this.quarterBreakActive = false;
+
+    this.passTypeText.setText("");
+
+    this.resetPlayersForQuarter();
+
+    this.updateQuarterDisplay();
+
+    console.log(
+        `Quarter ${this.currentQuarter} started.`
+    );
+}
+
+resetPlayersForQuarter() {
+    const formation =
+        this.formations.centreBounce;
+
+    this.clearPossession();
+    this.stopFootballFlight();
+
+    this.player.setPosition(
+        formation.MIDFIELDER.x,
+        formation.MIDFIELDER.y
+    );
+
+    this.teammate.setPosition(
+        formation.FORWARD.x,
+        formation.FORWARD.y
+    );
+
+    this.opponent.setPosition(
+        formation.DEFENDER.x,
+        formation.DEFENDER.y
+    );
+
+    this.football.setPosition(
+        this.field.centreX,
+        this.field.centreY
+    );
+
+    this.footballVelocityX = 0;
+    this.footballVelocityY = 0;
+
+    this.footballGroundState =
+        "NONE";
+
+    /*
+     * Remove movement left over from the previous
+     * quarter.
+     */
+    this.player.movementVelocityX = 0;
+    this.player.movementVelocityY = 0;
+
+    this.teammate.movementVelocityX = 0;
+    this.teammate.movementVelocityY = 0;
+
+    if (
+        this.controlledPlayer !==
+        this.player
+    ) {
+        this.switchControlledPlayer(
+            this.player
+        );
+    }
+
+    this.updateControlledPlayerIndicator();
+}
+
+finishMatch() {
+    this.matchFinished = true;
+    this.quarterBreakActive = false;
+
+    this.quarterTimeRemaining = 0;
+
+    this.clearPossession();
+    this.stopFootballFlight();
+
+    this.resetTouchMovement();
+    this.cancelPassAim();
+
+    if (this.quarterText) {
+        this.quarterText.setText(
+            "FULL TIME"
+        );
+    }
+
+    this.passTypeText.setText(
+        "FULL TIME"
+    );
+
+    console.log(
+        "Full time."
+    );
 }
 
 updateTeammateSupport(delta) {
@@ -5561,6 +5823,19 @@ if (scoreResult === "GOAL") {
 }
 
 restartAfterScore() {
+    /*
+     * Do not restart an old scoring passage after a
+     * quarter has ended.
+     */
+    if (
+        this.quarterBreakActive ||
+        this.matchFinished
+    ) {
+        this.scoreDetected = false;
+        this.lastScoreResult = null;
+
+        return;
+    }
 
     /*
      * Reset score detection.
@@ -7411,10 +7686,10 @@ this.homeScoreText = this.add.text(
         }
     );
 
-    const quarterText = this.add.text(
-        0,
-        -12,
-        "Q1   1:30",
+this.quarterText = this.add.text(
+    0,
+    -12,
+    "Q1   1:30",
         {
             fontFamily: "Courier New",
             fontSize: "16px",
@@ -7460,7 +7735,7 @@ this.awayScoreText = this.add.text(
         awayPanel,
         homeNameText,
 this.homeScoreText,
-quarterText,
+this.quarterText,
 this.awayScoreText,
         awayNameText
     ]);
