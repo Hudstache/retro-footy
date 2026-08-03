@@ -914,7 +914,7 @@ this.awayBehinds = 0;
  */
 this.currentQuarter = 1;
 
-this.quarterDuration = 10 * 1000;
+this.quarterDuration = 90 * 1000;
 this.quarterTimeRemaining =
     this.quarterDuration;
 
