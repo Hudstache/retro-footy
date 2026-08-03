@@ -2907,8 +2907,20 @@ if (this.hasHomePossession()) {
     const ballCarrier =
         this.possessionOwner;
 
-    const likelyReceiver =
-        this.supportPlayer;
+const likelyReceiver =
+    this.supportPlayer;
+
+/*
+ * Use the supporting player's current lead target as
+ * the likely destination of the next disposal.
+ */
+const likelyReceiverTargetX =
+    this.teammateData?.targetX ??
+    likelyReceiver.x;
+
+const likelyReceiverTargetY =
+    this.teammateData?.targetY ??
+    likelyReceiver.y;
 
     /*
      * Measure Green's distance from the ball carrier
@@ -2922,13 +2934,13 @@ if (this.hasHomePossession()) {
             ballCarrier.y
         );
 
-    const distanceToReceiver =
-        Phaser.Math.Distance.Between(
-            this.opponent.x,
-            this.opponent.y,
-            likelyReceiver.x,
-            likelyReceiver.y
-        );
+const distanceToReceiver =
+    Phaser.Math.Distance.Between(
+        this.opponent.x,
+        this.opponent.y,
+        likelyReceiverTargetX,
+        likelyReceiverTargetY
+    );
 
     /*
      * Green pressures the carrier when close enough.
@@ -2936,15 +2948,27 @@ if (this.hasHomePossession()) {
      * Otherwise, Green protects the space between the
      * carrier, receiver and attacking goal.
      */
-    const directPressureRange = 95;
+/*
+ * Green pressures the carrier when already close, but
+ * otherwise protects the most dangerous passing lane.
+ */
+const directPressureRange = 78;
+
+const emergencyPressureRange = 46;
 
     let targetX;
     let targetY;
 
-    if (
+if (
+    distanceToCarrier <=
+        emergencyPressureRange ||
+    (
         distanceToCarrier <=
-        directPressureRange
-    ) {
+            directPressureRange &&
+        distanceToReceiver >
+            distanceToCarrier + 28
+    )
+) {
         this.opponentData.state =
             "PRESSURE_CARRIER";
 
@@ -2976,20 +3000,68 @@ if (this.hasHomePossession()) {
          */
         const receiverGoalSideOffset = 34;
 
-        targetX =
-            likelyReceiver.x +
-            receiverGoalSideOffset;
+/*
+ * Cover the lane between the carrier and the receiver's
+ * lead destination rather than simply standing beside
+ * the receiver.
+ */
+const laneCoveragePercentage = 0.62;
 
-        /*
-         * Shade slightly toward the ball carrier so
-         * Green can react to either player.
-         */
-        targetY =
-            Phaser.Math.Linear(
-                likelyReceiver.y,
-                ballCarrier.y,
-                0.3
-            );
+targetX =
+    Phaser.Math.Linear(
+        ballCarrier.x,
+        likelyReceiverTargetX,
+        laneCoveragePercentage
+    ) +
+    receiverGoalSideOffset;
+
+targetY =
+    Phaser.Math.Linear(
+        ballCarrier.y,
+        likelyReceiverTargetY,
+        laneCoveragePercentage
+    );
+
+    /*
+ * Do not allow Green to move so far toward the receiver
+ * that the ball carrier has a completely open corridor.
+ */
+const maximumCarrierSeparation = 115;
+
+const targetDistanceFromCarrier =
+    Phaser.Math.Distance.Between(
+        ballCarrier.x,
+        ballCarrier.y,
+        targetX,
+        targetY
+    );
+
+if (
+    targetDistanceFromCarrier >
+    maximumCarrierSeparation
+) {
+    const directionFromCarrier =
+        new Phaser.Math.Vector2(
+            targetX - ballCarrier.x,
+            targetY - ballCarrier.y
+        );
+
+    if (
+        directionFromCarrier.length() > 0
+    ) {
+        directionFromCarrier.normalize();
+    }
+
+    targetX =
+        ballCarrier.x +
+        directionFromCarrier.x *
+            maximumCarrierSeparation;
+
+    targetY =
+        ballCarrier.y +
+        directionFromCarrier.y *
+            maximumCarrierSeparation;
+}
     }
 
     /*
@@ -3029,7 +3101,11 @@ if (this.hasHomePossession()) {
      * Prevent constant tiny movements around the
      * defensive target.
      */
-    const zoningStoppingDistance = 12;
+const zoningStoppingDistance =
+    this.opponentData.state ===
+        "PRESSURE_CARRIER"
+        ? 8
+        : 14;
 
     if (
         distanceToTarget <=
