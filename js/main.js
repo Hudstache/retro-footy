@@ -827,8 +827,18 @@ this.activeTackler = null;
 /*
  * Every tackle has a 5% chance of being ruled high.
  */
+/*
+ * Every tackle has a 5% chance of being ruled high.
+ */
 this.highTackleChance = 0.05;
 this.currentTackleIsHigh = false;
+
+/*
+ * Tackles initiated from behind the carrier have a
+ * 3% chance of being ruled push in the back.
+ */
+this.pushInBackChance = 0.03;
+this.currentTackleIsPushInBack = false;
 
 /*
  * Tacklers briefly recover after completing or
@@ -6232,23 +6242,72 @@ if (!this.isTackleActive) {
  * Phaser.Math.FloatBetween() returns a value between
  * 0 and 1. Values below 0.05 represent a 5% chance.
  */
+/*
+ * Roll for a high tackle first.
+ */
 this.currentTackleIsHigh =
     Phaser.Math.FloatBetween(
         0,
         1
     ) < this.highTackleChance;
 
-    if (this.currentTackleIsHigh) {
-        const infringedCarrier =
-            this.possessionOwner;
+if (this.currentTackleIsHigh) {
+    const infringedCarrier =
+        this.possessionOwner;
 
-        this.startHighTackleFreeKick(
-            infringedCarrier,
-            defender
-        );
+    this.startHighTackleFreeKick(
+        infringedCarrier,
+        defender
+    );
 
-        return;
-    }
+    return;
+}
+
+/*
+ * Determine whether the tackler began the tackle from
+ * behind the ball carrier.
+ *
+ * Home attacks right:
+ * behind the home carrier = lower x-position.
+ *
+ * Away attacks left:
+ * behind Green = higher x-position.
+ */
+const carrierIsHomePlayer =
+    this.isHomePlayer(
+        this.possessionOwner
+    );
+
+const tackleStartedFromBehind =
+    carrierIsHomePlayer
+        ? defender.x <
+            this.possessionOwner.x
+        : defender.x >
+            this.possessionOwner.x;
+
+/*
+ * Only rear tackles can produce push in the back.
+ */
+this.currentTackleIsPushInBack =
+    tackleStartedFromBehind &&
+    Phaser.Math.FloatBetween(
+        0,
+        1
+    ) < this.pushInBackChance;
+
+if (
+    this.currentTackleIsPushInBack
+) {
+    const infringedCarrier =
+        this.possessionOwner;
+
+    this.startPushInBackFreeKick(
+        infringedCarrier,
+        defender
+    );
+
+    return;
+}
 
 /*
  * Give immediate visual feedback when a tackle
@@ -6461,6 +6520,105 @@ startHighTackleFreeKick(
     );
 }
 
+startPushInBackFreeKick(
+    freeKickReceiver,
+    offendingTackler
+) {
+    if (
+        !freeKickReceiver ||
+        !offendingTackler
+    ) {
+        return;
+    }
+
+    /*
+     * Cancel the normal tackle result.
+     */
+    this.isTackleActive = false;
+    this.tackleTimer = 0;
+    this.activeTackler = null;
+
+    this.currentTackleIsHigh = false;
+    this.currentTackleIsPushInBack =
+        false;
+
+    /*
+     * The offending player still requires tackle
+     * recovery.
+     */
+    this.fatiguedTackler =
+        offendingTackler;
+
+    this.tackleFatigueTimer =
+        this.tackleFatigueDuration;
+
+    /*
+     * Move the offender away from the carrier so the
+     * tackle cannot immediately restart.
+     */
+    const separationDirection =
+        new Phaser.Math.Vector2(
+            offendingTackler.x -
+                freeKickReceiver.x,
+
+            offendingTackler.y -
+                freeKickReceiver.y
+        );
+
+    if (
+        separationDirection.length() ===
+        0
+    ) {
+        separationDirection.set(
+            1,
+            0
+        );
+    } else {
+        separationDirection.normalize();
+    }
+
+    offendingTackler.x =
+        freeKickReceiver.x +
+        separationDirection.x * 42;
+
+    offendingTackler.y =
+        freeKickReceiver.y +
+        separationDirection.y * 42;
+
+    this.keepObjectInsideField(
+        offendingTackler
+    );
+
+    /*
+     * The infringed carrier keeps possession.
+     */
+    this.setPossessionOwner(
+        freeKickReceiver
+    );
+
+    this.resetTouchMovement();
+    this.cancelPassAim();
+
+    this.passTypeText.setText(
+        "PUSH IN THE BACK"
+    );
+
+    console.log(
+        "Push in the back. Free kick to the ball carrier."
+    );
+
+    this.time.delayedCall(
+        850,
+        () => {
+            if (this.passTypeText) {
+                this.passTypeText.setText(
+                    ""
+                );
+            }
+        }
+    );
+}
+
 completeTackleSpill() {
 /*
  * Cancel the tackle outcome if the carrier disposed
@@ -6469,12 +6627,16 @@ completeTackleSpill() {
 if (
     !this.isTackleActive ||
     !this.possessionOwner ||
-    this.currentTackleIsHigh
+    this.currentTackleIsHigh ||
+    this.currentTackleIsPushInBack
 ) {
     this.isTackleActive = false;
     this.tackleTimer = 0;
     this.activeTackler = null;
+
     this.currentTackleIsHigh = false;
+    this.currentTackleIsPushInBack =
+        false;
 
     return;
 }
@@ -6507,6 +6669,10 @@ const hadPriorOpportunity =
 this.isTackleActive = false;
 this.tackleTimer = 0;
 this.activeTackler = null;
+
+this.currentTackleIsHigh = false;
+this.currentTackleIsPushInBack =
+    false;
 
 /*
  * A carrier with prior opportunity is penalised
