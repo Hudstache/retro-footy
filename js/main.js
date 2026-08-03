@@ -2216,47 +2216,148 @@ if (
      * The supporting player tries to remain ahead of
      * the currently controlled player.
      */
-    const forwardDistance = 115;
-    const supportWidth = 65;
+/*
+ * The supporting player creates a dynamic lead based
+ * on the ball carrier's position and movement.
+ */
+const forwardLeadDistance = 115;
+const sidewaysLeadDistance = 72;
+const trailingOptionDistance = 55;
 
-    const groundCentreY =
-        this.field.centreY;
+/*
+ * Read the controlled player's current movement
+ * direction.
+ */
+const carrierMovement =
+    new Phaser.Math.Vector2(
+        this.controlledPlayer
+            .movementVelocityX,
 
-    let verticalOffset;
+        this.controlledPlayer
+            .movementVelocityY
+    );
 
-    if (
-        this.controlledPlayer.y >=
-        groundCentreY
-    ) {
-        verticalOffset =
-            -supportWidth;
-    } else {
-        verticalOffset =
-            supportWidth;
-    }
+const carrierIsMoving =
+    carrierMovement.length() > 3;
 
-    let targetX =
-        this.controlledPlayer.x +
-        forwardDistance;
+if (carrierIsMoving) {
+    carrierMovement.normalize();
+} else {
+    /*
+     * Home currently attacks toward the right.
+     */
+    carrierMovement.set(1, 0);
+}
 
-    let targetY =
-        this.controlledPlayer.y +
-        verticalOffset;
+/*
+ * Create a perpendicular direction for a sideways
+ * passing option.
+ */
+const sidewaysDirection =
+    new Phaser.Math.Vector2(
+        -carrierMovement.y,
+        carrierMovement.x
+    );
 
-    const correctedTarget =
-        this.getPointInsideField(
-            targetX,
-            targetY
-        );
+/*
+ * Prefer the side farther away from Green.
+ */
+const upperLeadY =
+    this.controlledPlayer.y -
+    sidewaysLeadDistance;
 
-    targetX = correctedTarget.x;
-    targetY = correctedTarget.y;
+const lowerLeadY =
+    this.controlledPlayer.y +
+    sidewaysLeadDistance;
 
-    this.teammateData.targetX =
-        targetX;
+const greenDistanceToUpperLead =
+    Phaser.Math.Distance.Between(
+        this.opponent.x,
+        this.opponent.y,
+        this.controlledPlayer.x,
+        upperLeadY
+    );
 
-    this.teammateData.targetY =
-        targetY;
+const greenDistanceToLowerLead =
+    Phaser.Math.Distance.Between(
+        this.opponent.x,
+        this.opponent.y,
+        this.controlledPlayer.x,
+        lowerLeadY
+    );
+
+const leadSide =
+    greenDistanceToUpperLead >=
+    greenDistanceToLowerLead
+        ? -1
+        : 1;
+
+/*
+ * Build the main forward-leading position.
+ */
+let targetX =
+    this.controlledPlayer.x +
+    carrierMovement.x *
+        forwardLeadDistance +
+    sidewaysDirection.x *
+        sidewaysLeadDistance *
+        leadSide;
+
+let targetY =
+    this.controlledPlayer.y +
+    carrierMovement.y *
+        forwardLeadDistance +
+    sidewaysDirection.y *
+        sidewaysLeadDistance *
+        leadSide;
+
+/*
+ * When the ball carrier is close to the attacking
+ * boundary, provide a shorter option behind the ball
+ * instead of running outside the oval.
+ */
+const distanceToAttackingGoal =
+    this.field.rightGoalLineX -
+    this.controlledPlayer.x;
+
+if (
+    distanceToAttackingGoal <
+    forwardLeadDistance + 45
+) {
+    targetX =
+        this.controlledPlayer.x -
+        carrierMovement.x *
+            trailingOptionDistance +
+        sidewaysDirection.x *
+            sidewaysLeadDistance *
+            leadSide;
+
+    targetY =
+        this.controlledPlayer.y -
+        carrierMovement.y *
+            trailingOptionDistance +
+        sidewaysDirection.y *
+            sidewaysLeadDistance *
+            leadSide;
+}
+
+/*
+ * Keep the lead inside the playable oval.
+ */
+const correctedTarget =
+    this.getPointInsideField(
+        targetX,
+        targetY
+    );
+
+targetX = correctedTarget.x;
+targetY = correctedTarget.y;
+
+this.teammateData.targetX =
+    targetX;
+
+this.teammateData.targetY =
+    targetY;
 
     const directionToTarget =
         new Phaser.Math.Vector2(
@@ -2270,7 +2371,11 @@ if (
     const distanceToTarget =
         directionToTarget.length();
 
-    const stoppingDistance = 4;
+/*
+ * Stop with a small amount of space around the lead
+ * target so Blue does not constantly jitter.
+ */
+const stoppingDistance = 10;
 
     if (
         distanceToTarget <=
@@ -2288,9 +2393,19 @@ if (
     const deltaSeconds =
         delta / 1000;
 
-    const maximumMovement =
-        this.teammateData.speed *
-        deltaSeconds;
+/*
+ * Blue can briefly run at normal off-ball pace while
+ * creating a lead.
+ */
+const leadSpeed =
+    Math.max(
+        this.teammateData.speed,
+        this.playerSpeed
+    );
+
+const maximumMovement =
+    leadSpeed *
+    deltaSeconds;
 
     const movementDistance =
         Math.min(
