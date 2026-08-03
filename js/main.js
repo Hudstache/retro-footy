@@ -439,6 +439,14 @@ this.possessionOwner =
  */
 this.possessionTimer = 0;
 
+/*
+ * Allow Green to make one new disposal whenever
+ * he gains possession.
+ */
+if (newOwner === this.opponent) {
+    this.aiDisposalCompleted = false;
+}
+
     this.playerHasBall =
         ownerIsHomePlayer;
 
@@ -868,6 +876,16 @@ this.homeGoals = 0;
 this.homeBehinds = 0;
 this.awayGoals = 0;
 this.awayBehinds = 0;
+
+/*
+ * Basic AI disposal system.
+ *
+ * Step 16E will replace the alternating test behaviour
+ * with genuine decision-making.
+ */
+this.aiDisposalDelay = 1100;
+this.aiDisposalCompleted = false;
+this.aiNextDisposalIsKick = true;
 
     // Drag aiming
     this.isAimingPass = false;
@@ -2376,6 +2394,7 @@ this.updateAutomaticBounce(
 this.keepPlayerInsideField();
 this.updateTeammateSupport(delta);
 this.updateOpponentChase(delta);
+this.updateAIDisposal();
 this.updateFootballFlight(delta);
 this.updateFootballMarking();
 this.updateFootballGroundPhysics(delta);
@@ -3255,6 +3274,235 @@ this.opponent.y +=
 this.keepObjectInsideField(
     this.opponent
 );
+}
+
+updateAIDisposal() {
+    /*
+     * Green can only dispose while he owns the ball.
+     */
+    if (!this.hasAwayPossession()) {
+        return;
+    }
+
+    /*
+     * Only one disposal can occur during each
+     * possession.
+     */
+    if (this.aiDisposalCompleted) {
+        return;
+    }
+
+    /*
+     * Green cannot dispose during an active tackle.
+     */
+    if (this.isTackleActive) {
+        return;
+    }
+
+    /*
+     * Hold possession briefly before disposing.
+     */
+    if (
+        this.possessionTimer <
+        this.aiDisposalDelay
+    ) {
+        return;
+    }
+
+    const isKick =
+        this.aiNextDisposalIsKick;
+
+    /*
+     * Green currently attacks toward the left.
+     *
+     * The test kick travels farther than the test
+     * handball.
+     */
+    const targetDistance =
+        isKick ? 185 : 58;
+
+    const verticalOffset =
+        isKick
+            ? Phaser.Math.Between(-65, 65)
+            : Phaser.Math.Between(-30, 30);
+
+    const rawTargetX =
+        this.opponent.x -
+        targetDistance;
+
+    const rawTargetY =
+        this.opponent.y +
+        verticalOffset;
+
+    const correctedTarget =
+        this.getPointInsideField(
+            rawTargetX,
+            rawTargetY
+        );
+
+    this.aiDisposalCompleted = true;
+
+    this.launchAIFootball(
+        correctedTarget.x,
+        correctedTarget.y,
+        isKick
+    );
+
+    /*
+     * Alternate disposal type for testing.
+     */
+    this.aiNextDisposalIsKick =
+        !this.aiNextDisposalIsKick;
+}
+
+launchAIFootball(
+    targetX,
+    targetY,
+    isKick
+) {
+    if (!this.hasAwayPossession()) {
+        return;
+    }
+
+    const disposingPlayer =
+        this.opponent;
+
+    /*
+     * Use a medium-strength kick or handball for this
+     * first AI disposal prototype.
+     */
+    const powerPercentage =
+        isKick ? 0.55 : 0.7;
+
+    const minimumSpeed = 120;
+
+    const maximumSpeed =
+        isKick ? 380 : 165;
+
+    const launchSpeed =
+        Phaser.Math.Linear(
+            minimumSpeed,
+            maximumSpeed,
+            powerPercentage
+        );
+
+    const direction =
+        new Phaser.Math.Vector2(
+            targetX -
+                disposingPlayer.x,
+
+            targetY -
+                disposingPlayer.y
+        );
+
+    if (direction.length() === 0) {
+        direction.set(-1, 0);
+    } else {
+        direction.normalize();
+    }
+
+    /*
+     * The travelling football becomes unowned.
+     */
+    this.lastDisposalPlayer =
+        disposingPlayer;
+
+    this.clearPossession();
+
+    this.footballInFlight = true;
+
+    this.footballPickupLockTimer =
+        this.footballPickupLockDuration;
+
+    this.footballFlightType =
+        isKick ? "KICK" : "HANDBALL";
+
+    this.footballFlightTime = 0;
+    this.footballFlightDistance = 0;
+    this.footballCanBeMarked = false;
+
+    this.scoreDetected = false;
+    this.lastScoreResult = null;
+
+    /*
+     * Estimate the flight duration for the height and
+     * shadow system added in Step 16C.2.
+     */
+    const flightDragPerSecond =
+        isKick ? 1.25 : 2.15;
+
+    const flightStoppingSpeed =
+        isKick ? 42 : 32;
+
+    this.footballEstimatedFlightDuration =
+        Math.log(
+            launchSpeed /
+            flightStoppingSpeed
+        ) /
+        flightDragPerSecond;
+
+    /*
+     * Green carries and disposes from his left side.
+     */
+    this.football.x =
+        disposingPlayer.x - 18;
+
+    this.football.y =
+        disposingPlayer.y;
+
+    this.footballVelocityX =
+        direction.x *
+        launchSpeed;
+
+    this.footballVelocityY =
+        direction.y *
+        launchSpeed;
+
+    const minimumRotationSpeed =
+        isKick ? 540 : 300;
+
+    const maximumRotationSpeed =
+        isKick ? 900 : 540;
+
+    /*
+     * Reverse the spin direction for a disposal
+     * travelling toward the left.
+     */
+    this.footballRotationSpeed =
+        Phaser.Math.Linear(
+            minimumRotationSpeed,
+            maximumRotationSpeed,
+            powerPercentage
+        );
+
+    this.football.setScale(
+        this.footballBaseScaleX,
+        this.footballBaseScaleY
+    );
+
+    this.football.setStrokeStyle(
+        2,
+        isKick
+            ? 0xffd43b
+            : 0x66d9ff
+    );
+
+    if (this.footballShadow) {
+        this.footballShadow
+            .setPosition(
+                this.football.x,
+                this.football.y + 5
+            )
+            .setScale(1)
+            .setAlpha(0.3)
+            .setVisible(true);
+    }
+
+    console.log(
+        isKick
+            ? "Green kicked the football."
+            : "Green handballed the football."
+    );
 }
 
 updateCameraTarget() {
