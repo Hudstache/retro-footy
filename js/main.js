@@ -45,6 +45,7 @@ this.createScoreboard();
 this.createPlayer();
 this.createTeammate();
 this.createOpponent();
+this.createAwayTeammate();
 this.createFormationSystem();
 
 /*
@@ -642,6 +643,57 @@ this.opponent.markingAbility = 74;
 this.opponent.strength = 76;
 }
 
+createAwayTeammate() {
+    /*
+     * Second away player.
+     *
+     * This player begins as Green's forward and will
+     * later provide attacking leads and defensive cover.
+     */
+    this.awayTeammate =
+        this.add.rectangle(
+            this.field.centreX - 155,
+            this.field.centreY - 95,
+            22,
+            30,
+            0x35c45a
+        );
+
+    this.awayTeammate.setStrokeStyle(
+        3,
+        0xffffff
+    );
+
+    this.awayTeammateData = {
+        team: "away",
+        state: "HOLD_POSITION",
+        speed: 30,
+        targetX:
+            this.awayTeammate.x,
+        targetY:
+            this.awayTeammate.y,
+        hasBall: false
+    };
+
+    this.awayTeammate.movementVelocityX =
+        0;
+
+    this.awayTeammate.movementVelocityY =
+        0;
+
+    /*
+     * Temporary role and marking attributes.
+     */
+    this.awayTeammate.role =
+        "FORWARD";
+
+    this.awayTeammate.markingAbility =
+        73;
+
+    this.awayTeammate.strength =
+        69;
+}
+
 createFormationSystem() {
 
     /*
@@ -664,10 +716,15 @@ createFormationSystem() {
                 y: this.field.centreY + 80
             },
 
-            DEFENDER: {
-                x: this.field.centreX + 120,
-                y: this.field.centreY
-            }
+DEFENDER: {
+    x: this.field.centreX + 120,
+    y: this.field.centreY
+},
+
+AWAY_FORWARD: {
+    x: this.field.centreX + 40,
+    y: this.field.centreY - 80
+}
 
         }
 
@@ -700,6 +757,11 @@ applyCentreFormation() {
         formation.DEFENDER.x,
         formation.DEFENDER.y
     );
+
+    this.awayTeammate.setPosition(
+    formation.AWAY_FORWARD.x,
+    formation.AWAY_FORWARD.y
+);
 
     /*
      * Return the football to the exact centre.
@@ -793,8 +855,11 @@ if (this.footballShadow) {
     this.player.movementVelocityX = 0;
     this.player.movementVelocityY = 0;
 
-    this.teammate.movementVelocityX = 0;
-    this.teammate.movementVelocityY = 0;
+this.awayTeammate
+    .movementVelocityX = 0;
+
+this.awayTeammate
+    .movementVelocityY = 0;
 
     /*
      * Keep fatigue tracking aligned with the teleported
@@ -1194,6 +1259,8 @@ this.quarterBreakFatigueRecovery = 18;
 this.playerFatigue = this.maximumFatigue;
 this.teammateFatigue = this.maximumFatigue;
 this.opponentFatigue = this.maximumFatigue;
+this.awayTeammateFatigue =
+    this.maximumFatigue;
 
 /*
  * Store previous positions so fatigue can use actual
@@ -1216,6 +1283,12 @@ this.opponentPreviousFatigueX =
 
 this.opponentPreviousFatigueY =
     this.opponent.y;
+
+    this.awayTeammatePreviousFatigueX =
+    this.awayTeammate.x;
+
+this.awayTeammatePreviousFatigueY =
+    this.awayTeammate.y;
 
 /*
  * Maximum speed reduction at minimum energy.
@@ -3343,6 +3416,14 @@ recoverFatigueForQuarterBreak() {
             this.maximumFatigue
         );
 
+        this.awayTeammateFatigue =
+    Phaser.Math.Clamp(
+        this.awayTeammateFatigue +
+            this.quarterBreakFatigueRecovery,
+        this.minimumFatigue,
+        this.maximumFatigue
+    );
+
     console.log(
         "Quarter-break fatigue recovery applied.",
         {
@@ -3510,6 +3591,14 @@ updatePlayerFatigue(delta) {
             this.opponent.y
         );
 
+        const awayTeammateDistanceMoved =
+    Phaser.Math.Distance.Between(
+        this.awayTeammatePreviousFatigueX,
+        this.awayTeammatePreviousFatigueY,
+        this.awayTeammate.x,
+        this.awayTeammate.y
+    );
+
     /*
      * Convert frame movement into pixels per second.
      */
@@ -3530,6 +3619,12 @@ updatePlayerFatigue(delta) {
             ? opponentDistanceMoved /
                 deltaSeconds
             : 0;
+
+            const awayTeammateMovementSpeed =
+    deltaSeconds > 0
+        ? awayTeammateDistanceMoved /
+            deltaSeconds
+        : 0;
 
     /*
      * Update one player's energy.
@@ -3577,6 +3672,12 @@ updatePlayerFatigue(delta) {
             opponentMovementSpeed
         );
 
+        this.awayTeammateFatigue =
+    calculateFatigue(
+        this.awayTeammateFatigue,
+        awayTeammateMovementSpeed
+    );
+
     /*
      * Save current positions for the next frame.
      */
@@ -3597,6 +3698,12 @@ updatePlayerFatigue(delta) {
 
     this.opponentPreviousFatigueY =
         this.opponent.y;
+
+        this.awayTeammatePreviousFatigueX =
+    this.awayTeammate.x;
+
+this.awayTeammatePreviousFatigueY =
+    this.awayTeammate.y;
 }
 
 getPlayerFatigue(
@@ -3610,11 +3717,18 @@ getPlayerFatigue(
         return this.teammateFatigue;
     }
 
-    if (playerObject === this.opponent) {
-        return this.opponentFatigue;
-    }
+if (playerObject === this.opponent) {
+    return this.opponentFatigue;
+}
 
-    return this.maximumFatigue;
+if (
+    playerObject ===
+    this.awayTeammate
+) {
+    return this.awayTeammateFatigue;
+}
+
+return this.maximumFatigue;
 }
 
 getFatigueSpeedMultiplier(
