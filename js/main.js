@@ -932,6 +932,14 @@ this.minimumFatigue = 35;
 this.fatigueDrainPerSecond = 0.9;
 this.fatigueRecoveryPerSecond = 0.45;
 
+/*
+ * Players recover 18 energy points between quarters.
+ *
+ * Fatigue still carries across the match because this
+ * does not automatically return everyone to 100.
+ */
+this.quarterBreakFatigueRecovery = 18;
+
 this.playerFatigue = this.maximumFatigue;
 this.teammateFatigue = this.maximumFatigue;
 this.opponentFatigue = this.maximumFatigue;
@@ -2818,6 +2826,51 @@ endQuarter() {
     );
 }
 
+recoverFatigueForQuarterBreak() {
+    /*
+     * Restore part of each player's energy without
+     * completely removing accumulated match fatigue.
+     */
+    this.playerFatigue =
+        Phaser.Math.Clamp(
+            this.playerFatigue +
+                this.quarterBreakFatigueRecovery,
+            this.minimumFatigue,
+            this.maximumFatigue
+        );
+
+    this.teammateFatigue =
+        Phaser.Math.Clamp(
+            this.teammateFatigue +
+                this.quarterBreakFatigueRecovery,
+            this.minimumFatigue,
+            this.maximumFatigue
+        );
+
+    this.opponentFatigue =
+        Phaser.Math.Clamp(
+            this.opponentFatigue +
+                this.quarterBreakFatigueRecovery,
+            this.minimumFatigue,
+            this.maximumFatigue
+        );
+
+    console.log(
+        "Quarter-break fatigue recovery applied.",
+        {
+            red: Math.round(
+                this.playerFatigue
+            ),
+            blue: Math.round(
+                this.teammateFatigue
+            ),
+            green: Math.round(
+                this.opponentFatigue
+            )
+        }
+    );
+}
+
 startNextQuarter() {
     if (
         !this.quarterBreakActive ||
@@ -2835,11 +2888,17 @@ startNextQuarter() {
 
     this.quarterSirenPending = false;
 
-    this.passTypeText.setText("");
+this.passTypeText.setText("");
 
-    this.resetPlayersForQuarter();
+/*
+ * Restore part of each player's energy before the new
+ * quarter begins.
+ */
+this.recoverFatigueForQuarterBreak();
 
-    this.updateQuarterDisplay();
+this.resetPlayersForQuarter();
+
+this.updateQuarterDisplay();
 
     console.log(
         `Quarter ${this.currentQuarter} started.`
@@ -2889,6 +2948,29 @@ resetPlayersForQuarter() {
     this.teammate.movementVelocityX = 0;
     this.teammate.movementVelocityY = 0;
 
+    /*
+ * The quarter reset teleports players to formation
+ * positions. Update the fatigue reference positions so
+ * that teleportation is not mistaken for running.
+ */
+this.playerPreviousFatigueX =
+    this.player.x;
+
+this.playerPreviousFatigueY =
+    this.player.y;
+
+this.teammatePreviousFatigueX =
+    this.teammate.x;
+
+this.teammatePreviousFatigueY =
+    this.teammate.y;
+
+this.opponentPreviousFatigueX =
+    this.opponent.x;
+
+this.opponentPreviousFatigueY =
+    this.opponent.y;
+
     if (
         this.controlledPlayer !==
         this.player
@@ -2929,6 +3011,20 @@ finishMatch() {
 }
 
 updatePlayerFatigue(delta) {
+    /*
+     * Do not apply normal standing recovery during
+     * quarter breaks or after full time.
+     *
+     * Quarter recovery is handled once by
+     * recoverFatigueForQuarterBreak().
+     */
+    if (
+        this.quarterBreakActive ||
+        this.matchFinished
+    ) {
+        return;
+    }
+
     const deltaSeconds =
         delta / 1000;
 
