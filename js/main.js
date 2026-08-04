@@ -164,6 +164,18 @@ layoutResponsiveInterface() {
             );
         }
     }
+
+    /*
+ * Keep the temporary fatigue display in the
+ * upper-left corner.
+ */
+if (this.fatigueDebugText) {
+    this.fatigueDebugText.setPosition(
+        14,
+        76
+    );
+}
+
 }
 
 createPlayer() {
@@ -997,6 +1009,13 @@ this.minimumFatigueShepherdMultiplier =
 this.maximumFatigueDisposalError = 18;
 
 /*
+ * Temporary fatigue debugging display.
+ *
+ * Set this to false after fatigue balancing is complete.
+ */
+this.showFatigueDebug = true;
+
+/*
  * When the siren sounds during a disposal, the quarter
  * waits until the football is no longer in flight.
  */
@@ -1098,8 +1117,33 @@ this.passTypeText = this.add.text(
     .setOrigin(1, 0)
     .setScrollFactor(0)
     .setDepth(1001);
-    // Aiming line
-    this.aimGraphics = this.add.graphics();
+// Aiming line
+this.aimGraphics = this.add.graphics();
+
+/*
+ * Temporary fatigue display used during development.
+ */
+this.fatigueDebugText =
+    this.add.text(
+        14,
+        76,
+        "",
+        {
+            fontFamily: "Courier New",
+            fontSize: "13px",
+            color: "#ffffff",
+            backgroundColor: "#222222",
+            padding: {
+                x: 7,
+                y: 5
+            }
+        }
+    )
+    .setScrollFactor(0)
+    .setDepth(1001)
+    .setVisible(
+        this.showFatigueDebug
+    );
 }
 
 createCameraTarget() {
@@ -2315,16 +2359,11 @@ verticalDirection =
         1
     );
 
-targetY += Phaser.Math.FloatBetween(
-    -fatigueError,
-    fatigueError
-);
-
-    const direction =
-        new Phaser.Math.Vector2(
-            1,
-            verticalDirection
-        );
+const direction =
+    new Phaser.Math.Vector2(
+        1,
+        verticalDirection
+    );
 
     direction.normalize();
 
@@ -2414,6 +2453,7 @@ if (!this.controlledPlayer) {
  */
 this.updateQuarterTimer(delta);
 this.updatePlayerFatigue(delta);
+this.updateFatigueDebugDisplay();
 
 /*
  * Freeze gameplay during quarter breaks and after
@@ -3017,6 +3057,43 @@ finishMatch() {
 
     console.log(
         "Full time."
+    );
+}
+
+updateFatigueDebugDisplay() {
+    if (!this.fatigueDebugText) {
+        return;
+    }
+
+    this.fatigueDebugText.setVisible(
+        this.showFatigueDebug
+    );
+
+    if (!this.showFatigueDebug) {
+        return;
+    }
+
+    const redFatigue =
+        Math.round(
+            this.playerFatigue
+        );
+
+    const blueFatigue =
+        Math.round(
+            this.teammateFatigue
+        );
+
+    const greenFatigue =
+        Math.round(
+            this.opponentFatigue
+        );
+
+    this.fatigueDebugText.setText(
+        [
+            `RED ENERGY:   ${redFatigue}`,
+            `BLUE ENERGY:  ${blueFatigue}`,
+            `GREEN ENERGY: ${greenFatigue}`
+        ]
     );
 }
 
@@ -4427,8 +4504,6 @@ if (
                 this.opponent.x,
                 this.opponent.y
             );
-
-        let nearbyHomeDefenders = 0;
 
 let nearbyHomeDefenders = 0;
 let combinedPressureEffectiveness = 0;
