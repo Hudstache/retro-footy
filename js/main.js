@@ -1078,8 +1078,18 @@ this.shepherdSlowMultiplier = 0.72;
     this.aimCurrentX = 0;
     this.aimCurrentY = 0;
 
-    this.minimumPassDrag = 18;
-    this.maximumPassDrag = 140;
+/*
+ * A movement of only a few pixels is treated as a tap.
+ * Any larger deliberate drag produces a handball.
+ */
+this.minimumIntentionalDrag = 3;
+
+/*
+ * This remains the drag distance at which handball
+ * power begins increasing above its minimum value.
+ */
+this.minimumPassDrag = 18;
+this.maximumPassDrag = 140;
 
     // Short drag = handball, long drag = kick.
     this.handballKickThreshold = 65;
@@ -1772,10 +1782,20 @@ previewPowerPercentage =
         1
     );
 } else {
+/*
+ * Drags shorter than minimumPassDrag still display a
+ * minimum-strength handball rather than being rejected.
+ */
+const effectiveHandballDrag =
+    Math.max(
+        disposalDragDistance,
+        this.minimumPassDrag
+    );
+
 previewPowerPercentage =
     Phaser.Math.Clamp(
         (
-            disposalDragDistance -
+            effectiveHandballDrag -
             this.minimumPassDrag
         ) /
         (
@@ -2034,12 +2054,12 @@ this.aimGraphics.fillCircle(
 
 if (
     disposalDragDistance <
-    this.minimumPassDrag
+    this.minimumIntentionalDrag
 ) {
-        this.passTypeText.setText(
-            "DRAG TO PASS"
-        );
-    } else if (isKick) {
+    this.passTypeText.setText(
+        "DRAG TO PASS"
+    );
+} else if (isKick) {
         this.passTypeText.setText(
             "KICK"
         );
@@ -2082,9 +2102,13 @@ const disposalDragDistance =
         this.maximumPassDrag
     );
 
+/*
+ * Ignore taps and extremely tiny accidental movements,
+ * but accept every deliberate drag as a disposal.
+ */
 if (
     disposalDragDistance <
-    this.minimumPassDrag
+    this.minimumIntentionalDrag
 ) {
     this.cancelPassAim();
     return;
@@ -2246,19 +2270,29 @@ this.footballCanBeMarked = false;
 let powerPercentage;
 
 if (isKick) {
-    powerPercentage =
-        Phaser.Math.Clamp(
-            (
-                disposalDragDistance -
-                this.handballKickThreshold
-            ) /
-            (
-                this.maximumPassDrag -
-                this.handballKickThreshold
-            ),
-            0,
-            1
-        );
+/*
+ * A short deliberate drag produces the minimum
+ * handball speed. Longer drags increase its power.
+ */
+const effectiveHandballDrag =
+    Math.max(
+        disposalDragDistance,
+        this.minimumPassDrag
+    );
+
+powerPercentage =
+    Phaser.Math.Clamp(
+        (
+            effectiveHandballDrag -
+            this.minimumPassDrag
+        ) /
+        (
+            this.handballKickThreshold -
+            this.minimumPassDrag
+        ),
+        0,
+        1
+    );
 } else {
     powerPercentage =
         Phaser.Math.Clamp(
