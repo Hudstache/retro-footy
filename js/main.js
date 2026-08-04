@@ -58,6 +58,13 @@ this.controlledPlayer = this.player;
 this.supportPlayer = this.teammate;
 
 this.createFootball();
+
+/*
+ * Start the match using the same centre formation used
+ * for quarter and after-score restarts.
+ */
+this.applyCentreFormation();
+
 this.createControlledPlayerIndicator();
 
 /*
@@ -669,6 +676,98 @@ createFormationSystem() {
     console.log(
         "Formation system initialised."
     );
+}
+
+applyCentreFormation() {
+    const formation =
+        this.formations.centreBounce;
+
+    /*
+     * Place every player in the shared centre-restart
+     * formation.
+     */
+    this.player.setPosition(
+        formation.MIDFIELDER.x,
+        formation.MIDFIELDER.y
+    );
+
+    this.teammate.setPosition(
+        formation.FORWARD.x,
+        formation.FORWARD.y
+    );
+
+    this.opponent.setPosition(
+        formation.DEFENDER.x,
+        formation.DEFENDER.y
+    );
+
+    /*
+     * Return the football to the exact centre.
+     */
+    if (this.football) {
+        this.football.setPosition(
+            this.field.centreX,
+            this.field.centreY
+        );
+
+        this.footballVelocityX = 0;
+        this.footballVelocityY = 0;
+
+        this.footballGroundState =
+            "NONE";
+    }
+
+    /*
+     * Remove any movement left over from the previous
+     * passage of play.
+     */
+    this.player.movementVelocityX = 0;
+    this.player.movementVelocityY = 0;
+
+    this.teammate.movementVelocityX = 0;
+    this.teammate.movementVelocityY = 0;
+
+    /*
+     * Keep fatigue tracking aligned with the teleported
+     * player positions.
+     */
+    if (
+        this.playerPreviousFatigueX !==
+        undefined
+    ) {
+        this.playerPreviousFatigueX =
+            this.player.x;
+
+        this.playerPreviousFatigueY =
+            this.player.y;
+
+        this.teammatePreviousFatigueX =
+            this.teammate.x;
+
+        this.teammatePreviousFatigueY =
+            this.teammate.y;
+
+        this.opponentPreviousFatigueX =
+            this.opponent.x;
+
+        this.opponentPreviousFatigueY =
+            this.opponent.y;
+    }
+
+    /*
+     * Red begins as the controlled home player.
+     */
+    if (
+        this.controlledPlayer &&
+        this.controlledPlayer !==
+            this.player
+    ) {
+        this.switchControlledPlayer(
+            this.player
+        );
+    }
+
+    this.updateControlledPlayerIndicator();
 }
 
 createFootball() {
@@ -3226,81 +3325,10 @@ this.updateQuarterDisplay();
 }
 
 resetPlayersForQuarter() {
-    const formation =
-        this.formations.centreBounce;
-
     this.clearPossession();
     this.stopFootballFlight();
 
-    this.player.setPosition(
-        formation.MIDFIELDER.x,
-        formation.MIDFIELDER.y
-    );
-
-    this.teammate.setPosition(
-        formation.FORWARD.x,
-        formation.FORWARD.y
-    );
-
-    this.opponent.setPosition(
-        formation.DEFENDER.x,
-        formation.DEFENDER.y
-    );
-
-    this.football.setPosition(
-        this.field.centreX,
-        this.field.centreY
-    );
-
-    this.footballVelocityX = 0;
-    this.footballVelocityY = 0;
-
-    this.footballGroundState =
-        "NONE";
-
-    /*
-     * Remove movement left over from the previous
-     * quarter.
-     */
-    this.player.movementVelocityX = 0;
-    this.player.movementVelocityY = 0;
-
-    this.teammate.movementVelocityX = 0;
-    this.teammate.movementVelocityY = 0;
-
-    /*
- * The quarter reset teleports players to formation
- * positions. Update the fatigue reference positions so
- * that teleportation is not mistaken for running.
- */
-this.playerPreviousFatigueX =
-    this.player.x;
-
-this.playerPreviousFatigueY =
-    this.player.y;
-
-this.teammatePreviousFatigueX =
-    this.teammate.x;
-
-this.teammatePreviousFatigueY =
-    this.teammate.y;
-
-this.opponentPreviousFatigueX =
-    this.opponent.x;
-
-this.opponentPreviousFatigueY =
-    this.opponent.y;
-
-    if (
-        this.controlledPlayer !==
-        this.player
-    ) {
-        this.switchControlledPlayer(
-            this.player
-        );
-    }
-
-    this.updateControlledPlayerIndicator();
+    this.applyCentreFormation();
 }
 
 finishMatch() {
@@ -6134,15 +6162,33 @@ restartBoundaryThrowIn() {
 }
 
 restartBallUp() {
-    const restartX =
-        this.stoppageX;
+const restartX =
+    this.stoppageX;
 
-    const restartY =
-        this.stoppageY;
+const restartY =
+    this.stoppageY;
 
+/*
+ * A ball-up close to the middle uses the official
+ * centre-restart formation.
+ */
+const distanceFromCentre =
+    Phaser.Math.Distance.Between(
+        restartX,
+        restartY,
+        this.field.centreX,
+        this.field.centreY
+    );
+
+const isCentreBallUp =
+    distanceFromCentre <= 40;
+
+if (isCentreBallUp) {
+    this.applyCentreFormation();
+} else {
     /*
-     * Place one player from each team beside the
-     * stoppage, with the second home player nearby.
+     * Field ball-ups remain positioned around the
+     * actual stoppage location.
      */
     this.player.setPosition(
         restartX - 28,
@@ -6158,6 +6204,7 @@ restartBallUp() {
         restartX,
         restartY + 46
     );
+}
 
     this.keepObjectInsideField(
         this.player
@@ -6907,61 +6954,13 @@ restartAfterScore() {
         return;
     }
 
-    /*
-     * Reset score detection.
-     */
-    this.scoreDetected = false;
-    this.lastScoreResult = null;
+/*
+ * Return the match to the shared centre formation.
+ */
+this.clearPossession();
+this.stopFootballFlight();
 
-    /*
-     * Return the football to the centre.
-     */
-    this.clearPossession();
-
-    this.football.x =
-        this.field.centreX;
-
-    this.football.y =
-        this.field.centreY;
-
-    this.stopFootballFlight();
-
-    /*
-     * Return players to their current prototype
-     * starting positions.
-     *
-     * Phase 16 will replace these with formations.
-     */
-const formation =
-    this.formations.centreBounce;
-
-this.player.setPosition(
-    formation.MIDFIELDER.x,
-    formation.MIDFIELDER.y
-);
-
-this.teammate.setPosition(
-    formation.FORWARD.x,
-    formation.FORWARD.y
-);
-
-this.opponent.setPosition(
-    formation.DEFENDER.x,
-    formation.DEFENDER.y
-);
-
-    /*
-     * Red becomes the controlled player after every
-     * restart.
-     */
-    if (
-        this.controlledPlayer !==
-        this.player
-    ) {
-        this.switchControlledPlayer(
-            this.player
-        );
-    }
+this.applyCentreFormation();
 
     console.log(
         "Centre restart."
