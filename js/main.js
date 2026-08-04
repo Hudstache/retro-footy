@@ -228,6 +228,15 @@ this.player.movementVelocityY = 0;
  */
 this.player.role = "MIDFIELDER";
 
+/*
+ * Temporary prototype marking attributes.
+ *
+ * These will later come from each player's permanent
+ * roster ratings.
+ */
+this.player.markingAbility = 72;
+this.player.strength = 68;
+
     this.moveLeft = false;
     this.moveRight = false;
     this.moveUp = false;
@@ -264,6 +273,12 @@ this.teammate.movementVelocityY = 0;
  * Home teammate role.
  */
 this.teammate.role = "FORWARD";
+
+/*
+ * Blue is currently the strongest prototype marker.
+ */
+this.teammate.markingAbility = 78;
+this.teammate.strength = 72;
 }
 
 createControlledPlayerIndicator() {
@@ -612,6 +627,12 @@ speed: 30,
  * Away player role.
  */
 this.opponent.role = "DEFENDER";
+
+/*
+ * Green receives balanced defensive marking ratings.
+ */
+this.opponent.markingAbility = 74;
+this.opponent.strength = 76;
 }
 
 createFormationSystem() {
@@ -6940,6 +6961,68 @@ this.opponent.setPosition(
     );
 }
 
+calculateMarkingContestScore(
+    candidatePlayer,
+    distanceToFootball
+) {
+    if (!candidatePlayer) {
+        return 0;
+    }
+
+    const markingAbility =
+        candidatePlayer.markingAbility ??
+        70;
+
+    const strength =
+        candidatePlayer.strength ??
+        70;
+
+    /*
+     * Positioning quality ranges from:
+     *
+     * 100 = directly beneath the drop point
+     * 0   = at the outer marking-distance limit
+     */
+    const positioningQuality =
+        Phaser.Math.Clamp(
+            100 -
+            (
+                distanceToFootball /
+                this.playerMarkDistance
+            ) *
+            100,
+            0,
+            100
+        );
+
+    /*
+     * Contest weighting:
+     *
+     * Marking ability: 50%
+     * Positioning:      30%
+     * Strength:         20%
+     */
+    const baseContestScore =
+        markingAbility * 0.50 +
+        positioningQuality * 0.30 +
+        strength * 0.20;
+
+    /*
+     * Small randomness prevents identical contests from
+     * always producing exactly the same result.
+     */
+    const randomVariation =
+        Phaser.Math.FloatBetween(
+            -6,
+            6
+        );
+
+    return (
+        baseContestScore +
+        randomVariation
+    );
+}
+
 updateFootballMarking() {
     if (!this.footballInFlight) {
         return;
@@ -7025,13 +7108,19 @@ const markingCandidates = [
                 distanceToFootball <=
                 this.playerMarkDistance
             ) {
-                successfulCandidates.push({
-                    player:
-                        candidatePlayer,
+successfulCandidates.push({
+    player:
+        candidatePlayer,
 
-                    distance:
-                        distanceToFootball
-                });
+    distance:
+        distanceToFootball,
+
+    contestScore:
+        this.calculateMarkingContestScore(
+            candidatePlayer,
+            distanceToFootball
+        )
+});
             }
         }
     );
@@ -7042,23 +7131,100 @@ const markingCandidates = [
         return;
     }
 
-    successfulCandidates.sort(
-        (firstCandidate, secondCandidate) =>
-            firstCandidate.distance -
-            secondCandidate.distance
-    );
+/*
+ * Higher contest scores are placed first.
+ */
+successfulCandidates.sort(
+    (firstCandidate, secondCandidate) =>
+        secondCandidate.contestScore -
+        firstCandidate.contestScore
+);
 
     const closestCandidate =
         successfulCandidates[0];
 
-    const secondCandidate =
-        successfulCandidates[1];
+const secondCandidate =
+    successfulCandidates[1];
+
+/*
+ * When only one player reaches the football, calculate
+ * whether they complete the uncontested mark.
+ */
+if (!secondCandidate) {
+    const markingAbility =
+        closestCandidate.player
+            .markingAbility ??
+        70;
+
+    const positioningQuality =
+        Phaser.Math.Clamp(
+            1 -
+            (
+                closestCandidate.distance /
+                this.playerMarkDistance
+            ),
+            0,
+            1
+        );
 
     /*
-     * A spoil can only occur when two players reach
-     * the football at almost the same time.
+     * A well-positioned average player should normally
+     * complete an uncontested mark, while poor markers
+     * can occasionally drop it.
      */
-    if (secondCandidate) {
+    const uncontestedMarkChance =
+        Phaser.Math.Clamp(
+            0.55 +
+            markingAbility * 0.004 +
+            positioningQuality * 0.12,
+            0.60,
+            0.97
+        );
+
+    const markCompleted =
+        Math.random() <
+        uncontestedMarkChance;
+
+    if (!markCompleted) {
+        /*
+         * The football is dropped and becomes a loose
+         * ground-ball opportunity.
+         */
+        this.footballFlightType =
+            "DROPPED_MARK";
+
+        this.footballCanBeMarked =
+            false;
+
+        this.footballVelocityX *=
+            0.30;
+
+        this.footballVelocityY *=
+            0.30;
+
+        this.footballRotationSpeed =
+            Phaser.Math.FloatBetween(
+                -540,
+                540
+            );
+
+        this.passTypeText.setText(
+            "DROPPED MARK"
+        );
+
+        console.log(
+            "Uncontested mark dropped."
+        );
+
+        return;
+    }
+}
+
+/*
+ * A spoil can only occur when opposing players achieve
+ * similar contest scores.
+ */
+if (secondCandidate) {
         const closestIsOpponent =
             closestCandidate.player ===
             this.opponent;
@@ -7071,19 +7237,25 @@ const markingCandidates = [
             closestIsOpponent !==
             secondIsOpponent;
 
-        const contestDistanceDifference =
-            Math.abs(
-                closestCandidate.distance -
-                secondCandidate.distance
-            );
+/*
+ * A close contest-score result produces a spoil.
+ *
+ * A clearer score advantage produces a completed mark
+ * for the higher-ranked candidate.
+ */
+const contestScoreDifference =
+    Math.abs(
+        closestCandidate.contestScore -
+        secondCandidate.contestScore
+    );
 
-        const spoilContestMargin = 22;
+const spoilContestMargin = 10;
 
-        if (
-            playersAreOpponents &&
-            contestDistanceDifference <=
-                spoilContestMargin
-        ) {
+if (
+    playersAreOpponents &&
+    contestScoreDifference <=
+        spoilContestMargin
+) {
             /*
              * Change the flight type so this disposal
              * cannot immediately be marked again.
@@ -7117,6 +7289,13 @@ this.football.setStrokeStyle(
     2,
     0xffffff
 );
+
+if (this.airborneFootball) {
+    this.airborneFootball.setStrokeStyle(
+        2,
+        0xffffff
+    );
+}
 
 if (this.airborneFootball) {
     this.airborneFootball.setStrokeStyle(
