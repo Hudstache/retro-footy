@@ -980,10 +980,20 @@ this.minimumFatigueSpeedMultiplier =
 this.minimumFatigueAccelerationMultiplier =
     0.85;
 
-    /*
- * Maximum additional disposal inaccuracy caused by
- * fatigue (pixels).
+/*
+ * At minimum energy, defensive pressure retains
+ * 82% of its normal effectiveness.
  */
+this.minimumFatiguePressureMultiplier =
+    0.82;
+
+/*
+ * At minimum energy, shepherding retains
+ * 80% of its normal effectiveness.
+ */
+this.minimumFatigueShepherdMultiplier =
+    0.80;
+
 this.maximumFatigueDisposalError = 18;
 
 /*
@@ -3225,6 +3235,64 @@ getFatigueAccelerationMultiplier(
     );
 }
 
+getFatiguePressureMultiplier(
+    playerObject
+) {
+    const fatigue =
+        this.getPlayerFatigue(
+            playerObject
+        );
+
+    const fatiguePercentage =
+        Phaser.Math.Clamp(
+            (
+                fatigue -
+                this.minimumFatigue
+            ) /
+            (
+                this.maximumFatigue -
+                this.minimumFatigue
+            ),
+            0,
+            1
+        );
+
+    return Phaser.Math.Linear(
+        this.minimumFatiguePressureMultiplier,
+        1,
+        fatiguePercentage
+    );
+}
+
+getFatigueShepherdMultiplier(
+    playerObject
+) {
+    const fatigue =
+        this.getPlayerFatigue(
+            playerObject
+        );
+
+    const fatiguePercentage =
+        Phaser.Math.Clamp(
+            (
+                fatigue -
+                this.minimumFatigue
+            ) /
+            (
+                this.maximumFatigue -
+                this.minimumFatigue
+            ),
+            0,
+            1
+        );
+
+    return Phaser.Math.Linear(
+        this.minimumFatigueShepherdMultiplier,
+        1,
+        fatiguePercentage
+    );
+}
+
 getFatigueDisposalError(
     playerObject
 ) {
@@ -4259,23 +4327,44 @@ updateTeamPressure() {
                 this.possessionOwner.y
             );
 
-        if (
-            distanceToCarrier <=
-            this.strongPressureDistance
-        ) {
-            this.awayPressureOnCarrier = 2;
+/*
+ * Green's fatigue reduces how strongly he can pressure
+ * the home ball carrier.
+ */
+const greenPressureEffectiveness =
+    this.getFatiguePressureMultiplier(
+        this.opponent
+    );
 
-            this.controlledMovementPressureMultiplier =
-                this.strongPressureSpeedMultiplier;
-        } else if (
-            distanceToCarrier <=
-            this.pressureDistance
-        ) {
-            this.awayPressureOnCarrier = 1;
+if (
+    distanceToCarrier <=
+    this.strongPressureDistance
+) {
+    this.awayPressureOnCarrier = 2;
 
-            this.controlledMovementPressureMultiplier =
-                this.pressureSpeedMultiplier;
-        }
+    const normalSlowAmount =
+        1 -
+        this.strongPressureSpeedMultiplier;
+
+    this.controlledMovementPressureMultiplier =
+        1 -
+        normalSlowAmount *
+        greenPressureEffectiveness;
+} else if (
+    distanceToCarrier <=
+    this.pressureDistance
+) {
+    this.awayPressureOnCarrier = 1;
+
+    const normalSlowAmount =
+        1 -
+        this.pressureSpeedMultiplier;
+
+    this.controlledMovementPressureMultiplier =
+        1 -
+        normalSlowAmount *
+        greenPressureEffectiveness;
+}
 
         /*
          * The supporting home player can shepherd Green
@@ -4297,14 +4386,25 @@ updateTeamPressure() {
                 this.possessionOwner.y
             ) <= this.shepherdDistance + 28;
 
-        if (
-            distanceFromSupportToGreen <=
-                this.shepherdDistance &&
-            supportIsNearCarrier
-        ) {
-            this.opponentMovementMultiplier =
-                this.shepherdSlowMultiplier;
-        }
+if (
+    distanceFromSupportToGreen <=
+        this.shepherdDistance &&
+    supportIsNearCarrier
+) {
+    const shepherdEffectiveness =
+        this.getFatigueShepherdMultiplier(
+            this.supportPlayer
+        );
+
+    const normalShepherdSlowAmount =
+        1 -
+        this.shepherdSlowMultiplier;
+
+    this.opponentMovementMultiplier =
+        1 -
+        normalShepherdSlowAmount *
+        shepherdEffectiveness;
+}
     }
 
     /*
@@ -4330,10 +4430,58 @@ updateTeamPressure() {
 
         let nearbyHomeDefenders = 0;
 
-        if (
-            controlledDistance <=
+let nearbyHomeDefenders = 0;
+let combinedPressureEffectiveness = 0;
+
+if (
+    controlledDistance <=
+    this.pressureDistance
+) {
+    nearbyHomeDefenders++;
+
+    combinedPressureEffectiveness +=
+        this.getFatiguePressureMultiplier(
+            this.controlledPlayer
+        );
+}
+
+if (
+    supportDistance <=
+    this.pressureDistance
+) {
+    nearbyHomeDefenders++;
+
+    combinedPressureEffectiveness +=
+        this.getFatiguePressureMultiplier(
+            this.supportPlayer
+        );
+}
+
+this.homePressureOnOpponent =
+    nearbyHomeDefenders;
+
+if (nearbyHomeDefenders > 0) {
+    const averagePressureEffectiveness =
+        combinedPressureEffectiveness /
+        nearbyHomeDefenders;
+
+    const basePressureMultiplier =
+        nearbyHomeDefenders >= 2
+            ? this.strongPressureSpeedMultiplier
+            : this.pressureSpeedMultiplier;
+
+    const normalSlowAmount =
+        1 -
+        basePressureMultiplier;
+
+    this.opponentMovementMultiplier =
+        1 -
+        normalSlowAmount *
+        averagePressureEffectiveness;
+}            
+controlledDistance <=
             this.pressureDistance
-        ) {
+            {
             nearbyHomeDefenders++;
         }
 
