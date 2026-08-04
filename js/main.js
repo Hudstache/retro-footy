@@ -1073,10 +1073,27 @@ this.shepherdSlowMultiplier = 0.72;
     this.isAimingPass = false;
     this.aimPointerId = null;
 
-    this.aimStartX = 0;
-    this.aimStartY = 0;
-    this.aimCurrentX = 0;
-    this.aimCurrentY = 0;
+/*
+ * Fixed world position from which the slingshot
+ * direction is calculated.
+ */
+this.aimStartX = 0;
+this.aimStartY = 0;
+
+/*
+ * Current finger position.
+ */
+this.aimCurrentX = 0;
+this.aimCurrentY = 0;
+
+/*
+ * Actual touch-down position.
+ *
+ * This remains separate from the football-centred aim
+ * origin so a stationary tap cannot accidentally pass.
+ */
+this.aimTouchStartX = 0;
+this.aimTouchStartY = 0;
 
 /*
  * A movement of only a few pixels is treated as a tap.
@@ -1658,11 +1675,31 @@ const distanceFromPlayer =
     this.isAimingPass = true;
     this.aimPointerId = pointer.id;
 
-    this.aimStartX = pointerX;
-    this.aimStartY = pointerY;
+/*
+ * Centre the slingshot axis on the football rather
+ * than wherever the player's finger first touched.
+ */
+this.aimStartX =
+    this.football.x;
 
-    this.aimCurrentX = pointerX;
-    this.aimCurrentY = pointerY;
+this.aimStartY =
+    this.football.y;
+
+/*
+ * Store the actual touch-down position separately so
+ * we can distinguish a deliberate drag from a tap.
+ */
+this.aimTouchStartX =
+    pointerX;
+
+this.aimTouchStartY =
+    pointerY;
+
+this.aimCurrentX =
+    pointerX;
+
+this.aimCurrentY =
+    pointerY;
 
     /*
      * Stop movement while aiming.
@@ -2052,8 +2089,16 @@ this.aimGraphics.fillCircle(
 
     }
 
+const fingerMovementDistance =
+    Phaser.Math.Distance.Between(
+        this.aimTouchStartX,
+        this.aimTouchStartY,
+        this.aimCurrentX,
+        this.aimCurrentY
+    );
+
 if (
-    disposalDragDistance <
+    fingerMovementDistance <
     this.minimumIntentionalDrag
 ) {
     this.passTypeText.setText(
@@ -2082,16 +2127,18 @@ releasePassAim(pointer) {
     this.aimCurrentX = pointer.worldX;
     this.aimCurrentY = pointer.worldY;
 
-    const dragX =
-        this.aimCurrentX - this.aimStartX;
-
-    const dragY =
-        this.aimCurrentY - this.aimStartY;
-
 /*
- * Use the full drag length so disposal power is equal
- * in every direction.
+ * Disposal direction and power are measured from the
+ * football-centred slingshot origin.
  */
+const dragX =
+    this.aimCurrentX -
+    this.aimStartX;
+
+const dragY =
+    this.aimCurrentY -
+    this.aimStartY;
+
 const disposalDragDistance =
     Phaser.Math.Clamp(
         Math.sqrt(
@@ -2103,11 +2150,25 @@ const disposalDragDistance =
     );
 
 /*
+ * Intent is measured from the actual touch-down point.
+ *
+ * This prevents a tap beside the football from being
+ * mistaken for a deliberate handball.
+ */
+const fingerMovementDistance =
+    Phaser.Math.Distance.Between(
+        this.aimTouchStartX,
+        this.aimTouchStartY,
+        this.aimCurrentX,
+        this.aimCurrentY
+    );
+
+/*
  * Ignore taps and extremely tiny accidental movements,
  * but accept every deliberate drag as a disposal.
  */
 if (
-    disposalDragDistance <
+    fingerMovementDistance <
     this.minimumIntentionalDrag
 ) {
     this.cancelPassAim();
