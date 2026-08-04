@@ -924,6 +924,19 @@ this.quarterBreakActive = false;
 this.matchFinished = false;
 
 /*
+ * Fatigue system.
+ */
+this.maximumFatigue = 100;
+this.minimumFatigue = 35;
+
+this.fatigueDrainPerSecond = 0.9;
+this.fatigueRecoveryPerSecond = 0.45;
+
+this.playerFatigue = this.maximumFatigue;
+this.teammateFatigue = this.maximumFatigue;
+this.opponentFatigue = this.maximumFatigue;
+
+/*
  * When the siren sounds during a disposal, the quarter
  * waits until the football is no longer in flight.
  */
@@ -2306,6 +2319,7 @@ if (!this.controlledPlayer) {
  * Update the match clock before normal gameplay.
  */
 this.updateQuarterTimer(delta);
+this.updatePlayerFatigue(delta);
 
 /*
  * Freeze gameplay during quarter breaks and after
@@ -2820,6 +2834,64 @@ finishMatch() {
     console.log(
         "Full time."
     );
+}
+
+updatePlayerFatigue(delta) {
+
+    const deltaSeconds = delta / 1000;
+
+    const updateFatigue = (
+        player,
+        currentFatigue
+    ) => {
+
+        const speed = Math.sqrt(
+            (player.body?.velocity.x ?? 0) ** 2 +
+            (player.body?.velocity.y ?? 0) ** 2
+        );
+
+        /*
+         * Running drains fatigue.
+         * Standing or walking slowly recovers it.
+         */
+        if (speed > 40) {
+
+            currentFatigue -=
+                this.fatigueDrainPerSecond *
+                deltaSeconds;
+
+        } else {
+
+            currentFatigue +=
+                this.fatigueRecoveryPerSecond *
+                deltaSeconds;
+
+        }
+
+        return Phaser.Math.Clamp(
+            currentFatigue,
+            this.minimumFatigue,
+            this.maximumFatigue
+        );
+    };
+
+    this.playerFatigue =
+        updateFatigue(
+            this.player,
+            this.playerFatigue
+        );
+
+    this.teammateFatigue =
+        updateFatigue(
+            this.teammate,
+            this.teammateFatigue
+        );
+
+    this.opponentFatigue =
+        updateFatigue(
+            this.opponent,
+            this.opponentFatigue
+        );
 }
 
 updateTeammateSupport(delta) {
