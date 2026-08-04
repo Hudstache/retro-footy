@@ -929,12 +929,42 @@ this.matchFinished = false;
 this.maximumFatigue = 100;
 this.minimumFatigue = 35;
 
-this.fatigueDrainPerSecond = 0.9;
+this.fatigueDrainPerSecond = 12;
 this.fatigueRecoveryPerSecond = 0.45;
 
 this.playerFatigue = this.maximumFatigue;
 this.teammateFatigue = this.maximumFatigue;
 this.opponentFatigue = this.maximumFatigue;
+
+/*
+ * Store previous positions so fatigue can use actual
+ * player movement rather than physics-body velocity.
+ */
+this.playerPreviousFatigueX =
+    this.player.x;
+
+this.playerPreviousFatigueY =
+    this.player.y;
+
+this.teammatePreviousFatigueX =
+    this.teammate.x;
+
+this.teammatePreviousFatigueY =
+    this.teammate.y;
+
+this.opponentPreviousFatigueX =
+    this.opponent.x;
+
+this.opponentPreviousFatigueY =
+    this.opponent.y;
+
+/*
+ * Maximum speed reduction at minimum energy.
+ *
+ * A player at 35 energy runs at 88% of normal speed.
+ */
+this.minimumFatigueSpeedMultiplier =
+    0.88;
 
 /*
  * When the siren sounds during a disposal, the quarter
@@ -2470,10 +2500,16 @@ const pressureMovementMultiplier =
     this.controlledMovementPressureMultiplier ??
     1;
 
+const controlledFatigueMultiplier =
+    this.getFatigueSpeedMultiplier(
+        this.controlledPlayer
+    );
+
 const targetSpeed =
     currentMaximumSpeed *
     movementSpeedMultiplier *
-    pressureMovementMultiplier;
+    pressureMovementMultiplier *
+    controlledFatigueMultiplier;
 
 const targetVelocityX =
     inputDirection.x *
@@ -2837,35 +2873,77 @@ finishMatch() {
 }
 
 updatePlayerFatigue(delta) {
+    const deltaSeconds =
+        delta / 1000;
 
-    const deltaSeconds = delta / 1000;
-
-    const updateFatigue = (
-        player,
-        currentFatigue
-    ) => {
-
-        const speed = Math.sqrt(
-            (player.body?.velocity.x ?? 0) ** 2 +
-            (player.body?.velocity.y ?? 0) ** 2
+    /*
+     * Measure actual movement completed during the
+     * previous frame.
+     */
+    const playerDistanceMoved =
+        Phaser.Math.Distance.Between(
+            this.playerPreviousFatigueX,
+            this.playerPreviousFatigueY,
+            this.player.x,
+            this.player.y
         );
 
-        /*
-         * Running drains fatigue.
-         * Standing or walking slowly recovers it.
-         */
-        if (speed > 40) {
+    const teammateDistanceMoved =
+        Phaser.Math.Distance.Between(
+            this.teammatePreviousFatigueX,
+            this.teammatePreviousFatigueY,
+            this.teammate.x,
+            this.teammate.y
+        );
 
+    const opponentDistanceMoved =
+        Phaser.Math.Distance.Between(
+            this.opponentPreviousFatigueX,
+            this.opponentPreviousFatigueY,
+            this.opponent.x,
+            this.opponent.y
+        );
+
+    /*
+     * Convert frame movement into pixels per second.
+     */
+    const playerMovementSpeed =
+        deltaSeconds > 0
+            ? playerDistanceMoved /
+                deltaSeconds
+            : 0;
+
+    const teammateMovementSpeed =
+        deltaSeconds > 0
+            ? teammateDistanceMoved /
+                deltaSeconds
+            : 0;
+
+    const opponentMovementSpeed =
+        deltaSeconds > 0
+            ? opponentDistanceMoved /
+                deltaSeconds
+            : 0;
+
+    /*
+     * Update one player's energy.
+     */
+    const calculateFatigue = (
+        currentFatigue,
+        movementSpeed
+    ) => {
+        /*
+         * Running near normal speed drains energy.
+         * Standing or moving slowly permits recovery.
+         */
+        if (movementSpeed > 18) {
             currentFatigue -=
                 this.fatigueDrainPerSecond *
                 deltaSeconds;
-
         } else {
-
             currentFatigue +=
                 this.fatigueRecoveryPerSecond *
                 deltaSeconds;
-
         }
 
         return Phaser.Math.Clamp(
@@ -2876,22 +2954,94 @@ updatePlayerFatigue(delta) {
     };
 
     this.playerFatigue =
-        updateFatigue(
-            this.player,
-            this.playerFatigue
+        calculateFatigue(
+            this.playerFatigue,
+            playerMovementSpeed
         );
 
     this.teammateFatigue =
-        updateFatigue(
-            this.teammate,
-            this.teammateFatigue
+        calculateFatigue(
+            this.teammateFatigue,
+            teammateMovementSpeed
         );
 
     this.opponentFatigue =
-        updateFatigue(
-            this.opponent,
-            this.opponentFatigue
+        calculateFatigue(
+            this.opponentFatigue,
+            opponentMovementSpeed
         );
+
+    /*
+     * Save current positions for the next frame.
+     */
+    this.playerPreviousFatigueX =
+        this.player.x;
+
+    this.playerPreviousFatigueY =
+        this.player.y;
+
+    this.teammatePreviousFatigueX =
+        this.teammate.x;
+
+    this.teammatePreviousFatigueY =
+        this.teammate.y;
+
+    this.opponentPreviousFatigueX =
+        this.opponent.x;
+
+    this.opponentPreviousFatigueY =
+        this.opponent.y;
+}
+
+getPlayerFatigue(
+    playerObject
+) {
+    if (playerObject === this.player) {
+        return this.playerFatigue;
+    }
+
+    if (playerObject === this.teammate) {
+        return this.teammateFatigue;
+    }
+
+    if (playerObject === this.opponent) {
+        return this.opponentFatigue;
+    }
+
+    return this.maximumFatigue;
+}
+
+getFatigueSpeedMultiplier(
+    playerObject
+) {
+    const fatigue =
+        this.getPlayerFatigue(
+            playerObject
+        );
+
+    /*
+     * Convert energy from 35–100 into progress
+     * from 0–1.
+     */
+    const fatiguePercentage =
+        Phaser.Math.Clamp(
+            (
+                fatigue -
+                this.minimumFatigue
+            ) /
+            (
+                this.maximumFatigue -
+                this.minimumFatigue
+            ),
+            0,
+            1
+        );
+
+    return Phaser.Math.Linear(
+        this.minimumFatigueSpeedMultiplier,
+        1,
+        fatiguePercentage
+    );
 }
 
 updateTeammateSupport(delta) {
@@ -3025,8 +3175,11 @@ if (
          * Blue moves slightly faster when contesting
          * a loose football than during normal support.
          */
-        const looseBallChaseSpeed = 31.5;
-
+        const looseBallChaseSpeed =
+    31.5 *
+    this.getFatigueSpeedMultiplier(
+        this.supportPlayer
+    );
         const maximumMovement =
             looseBallChaseSpeed *
             (delta / 1000);
@@ -3239,11 +3392,17 @@ const stoppingDistance = 10;
  * Blue can briefly run at normal off-ball pace while
  * creating a lead.
  */
+const supportFatigueMultiplier =
+    this.getFatigueSpeedMultiplier(
+        this.supportPlayer
+    );
+
 const leadSpeed =
     Math.max(
         this.teammateData.speed,
         this.playerSpeed
-    );
+    ) *
+    supportFatigueMultiplier;
 
 const maximumMovement =
     leadSpeed *
@@ -3327,12 +3486,18 @@ updateOpponentChase(delta) {
 /*
  * Combined home pressure slows Green while carrying.
  */
+const opponentFatigueMultiplier =
+    this.getFatigueSpeedMultiplier(
+        this.opponent
+    );
+
 const carrySpeed =
     this.ballCarrierSpeed *
     (
         this.opponentMovementMultiplier ??
         1
-    );
+    ) *
+    opponentFatigueMultiplier;
 
         this.opponent.x +=
             carryDirection.x *
@@ -3589,6 +3754,9 @@ const maximumMovement =
         this.opponentMovementMultiplier ??
         1
     ) *
+    this.getFatigueSpeedMultiplier(
+        this.opponent
+    ) *
     deltaSeconds;
 
     const movementDistance =
@@ -3825,7 +3993,11 @@ directionToFootball.normalize();
  * Green moves faster when attacking a loose football
  * than he does during normal defensive pressure.
  */
-const looseBallChaseSpeed = 31.5;
+const looseBallChaseSpeed =
+    31.5 *
+    this.getFatigueSpeedMultiplier(
+        this.opponent
+    );
 
 const maximumMovement =
     looseBallChaseSpeed *
