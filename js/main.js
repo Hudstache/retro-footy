@@ -929,7 +929,7 @@ this.matchFinished = false;
 this.maximumFatigue = 100;
 this.minimumFatigue = 35;
 
-this.fatigueDrainPerSecond = 12;
+this.fatigueDrainPerSecond = 0.9;
 this.fatigueRecoveryPerSecond = 0.45;
 
 this.playerFatigue = this.maximumFatigue;
@@ -971,6 +971,12 @@ this.minimumFatigueSpeedMultiplier =
  */
 this.minimumFatigueAccelerationMultiplier =
     0.85;
+
+    /*
+ * Maximum additional disposal inaccuracy caused by
+ * fatigue (pixels).
+ */
+this.maximumFatigueDisposalError = 18;
 
 /*
  * When the siren sounds during a disposal, the quarter
@@ -2262,6 +2268,40 @@ if (maximumAccuracyError > 0) {
         );
 }
 
+/*
+ * Fatigue introduces additional vertical disposal
+ * inaccuracy.
+ *
+ * getFatigueDisposalError() returns a pixel-style
+ * error value between 0 and 18. Convert that into the
+ * same direction scale used by verticalDirection.
+ */
+const fatigueError =
+    this.getFatigueDisposalError(
+        this.controlledPlayer
+    );
+
+const fatigueDirectionError =
+    fatigueError / 100;
+
+verticalDirection +=
+    Phaser.Math.FloatBetween(
+        -fatigueDirectionError,
+        fatigueDirectionError
+    );
+
+verticalDirection =
+    Phaser.Math.Clamp(
+        verticalDirection,
+        -1,
+        1
+    );
+
+targetY += Phaser.Math.FloatBetween(
+    -fatigueError,
+    fatigueError
+);
+
     const direction =
         new Phaser.Math.Vector2(
             1,
@@ -3085,6 +3125,39 @@ getFatigueAccelerationMultiplier(
     return Phaser.Math.Linear(
         this.minimumFatigueAccelerationMultiplier,
         1,
+        fatiguePercentage
+    );
+}
+
+getFatigueDisposalError(
+    playerObject
+) {
+    const fatigue =
+        this.getPlayerFatigue(
+            playerObject
+        );
+
+    const fatiguePercentage =
+        Phaser.Math.Clamp(
+            (
+                fatigue -
+                this.minimumFatigue
+            ) /
+            (
+                this.maximumFatigue -
+                this.minimumFatigue
+            ),
+            0,
+            1
+        );
+
+    /*
+     * Fresh players receive almost no fatigue penalty.
+     * Very tired players receive the full penalty.
+     */
+    return Phaser.Math.Linear(
+        this.maximumFatigueDisposalError,
+        0,
         fatiguePercentage
     );
 }
@@ -4415,20 +4488,43 @@ if (isKick) {
             powerPercentage
         );
 
-    const direction =
-        new Phaser.Math.Vector2(
-            targetX -
-                disposingPlayer.x,
+/*
+ * Fatigue slightly shifts Green's selected target
+ * before the kick direction is calculated.
+ */
+const fatigueError =
+    this.getFatigueDisposalError(
+        disposingPlayer
+    );
 
-            targetY -
-                disposingPlayer.y
-        );
+const adjustedTargetX =
+    targetX +
+    Phaser.Math.FloatBetween(
+        -fatigueError,
+        fatigueError
+    );
 
-    if (direction.length() === 0) {
-        direction.set(-1, 0);
-    } else {
-        direction.normalize();
-    }
+const adjustedTargetY =
+    targetY +
+    Phaser.Math.FloatBetween(
+        -fatigueError,
+        fatigueError
+    );
+
+const direction =
+    new Phaser.Math.Vector2(
+        adjustedTargetX -
+            disposingPlayer.x,
+
+        adjustedTargetY -
+            disposingPlayer.y
+    );
+
+if (direction.length() === 0) {
+    direction.set(-1, 0);
+} else {
+    direction.normalize();
+}
 
     /*
      * The travelling football becomes unowned.
