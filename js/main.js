@@ -1685,13 +1685,29 @@ drawPassAim() {
         return;
     }
 
-    const dragX =
-        this.aimCurrentX -
-        this.aimStartX;
+const dragX =
+    this.aimCurrentX -
+    this.aimStartX;
 
-    const dragY =
-        this.aimCurrentY -
-        this.aimStartY;
+const dragY =
+    this.aimCurrentY -
+    this.aimStartY;
+
+/*
+ * The drag vector determines the disposal direction.
+ *
+ * The football travels opposite to the drag,
+ * matching Retro Bowl's controls.
+ */
+const aimDirection =
+    new Phaser.Math.Vector2(
+        -dragX,
+        -dragY
+    );
+
+if (aimDirection.length() > 0) {
+    aimDirection.normalize();
+}
 
     /*
      * Horizontal drag controls disposal power.
@@ -1796,20 +1812,8 @@ const previewLength =
         previewDragPerSecond
     );
 
-const previewVerticalDirection =
-    Phaser.Math.Clamp(
-        aimedVerticalOffset / 100,
-        -1,
-        1
-    );
-
 const previewDirection =
-    new Phaser.Math.Vector2(
-        1,
-        previewVerticalDirection
-    );
-
-previewDirection.normalize();
+    aimDirection.clone();
 
 const startX =
     this.controlledPlayer.x + 10;
@@ -2292,12 +2296,21 @@ this.footballEstimatedFlightDuration =
      * Drag down = football travels up.
      * Drag up   = football travels down.
      */
-let verticalDirection =
-    Phaser.Math.Clamp(
-        -verticalDrag / 100,
-        -1,
-        1
+const disposalVector =
+    new Phaser.Math.Vector2(
+        -horizontalDrag,
+        -verticalDrag
     );
+
+if (disposalVector.length() > 0) {
+    disposalVector.normalize();
+}
+
+let horizontalDirection =
+    disposalVector.x;
+
+let verticalDirection =
+    disposalVector.y;
 
 /*
  * Calculate disposal inaccuracy from movement and
@@ -2361,11 +2374,11 @@ verticalDirection =
 
 const direction =
     new Phaser.Math.Vector2(
-        1,
+        horizontalDirection,
         verticalDirection
     );
 
-    direction.normalize();
+direction.normalize();
 
     /*
      * Place the football slightly in front of the
