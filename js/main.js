@@ -837,6 +837,12 @@ this.footballBaseScaleY = 1;
 this.playerMarkDistance = 30;
 
 /*
+ * Players can only mark the football once it descends
+ * within this height above the ground plane.
+ */
+this.maximumMarkableFootballHeight = 18;
+
+/*
  * Tackling system.
  */
 this.tackleDistance = 26;
@@ -6947,14 +6953,53 @@ updateFootballMarking() {
         return;
     }
 
-    if (
-        this.footballFlightTime <
-        this.minimumMarkFlightTime
-    ) {
-        return;
-    }
+if (
+    this.footballFlightTime <
+    this.minimumMarkFlightTime
+) {
+    return;
+}
 
-    const markingCandidates = [
+/*
+ * Work out whether the football is rising or falling.
+ *
+ * The apex occurs halfway through the estimated flight.
+ */
+const safeFlightDuration =
+    Math.max(
+        0.01,
+        this.footballEstimatedFlightDuration
+    );
+
+const flightProgress =
+    Phaser.Math.Clamp(
+        this.footballFlightTime /
+            safeFlightDuration,
+        0,
+        1
+    );
+
+const footballIsDescending =
+    flightProgress >= 0.5;
+
+/*
+ * A high football passes over players underneath it.
+ *
+ * Marking becomes available only after the football
+ * begins descending and returns within reach.
+ */
+const footballIsWithinMarkingHeight =
+    this.footballHeight <=
+    this.maximumMarkableFootballHeight;
+
+if (
+    !footballIsDescending ||
+    !footballIsWithinMarkingHeight
+) {
+    return;
+}
+
+const markingCandidates = [
         this.controlledPlayer,
         this.supportPlayer,
         this.opponent
@@ -7072,6 +7117,13 @@ this.football.setStrokeStyle(
     2,
     0xffffff
 );
+
+if (this.airborneFootball) {
+    this.airborneFootball.setStrokeStyle(
+        2,
+        0xffffff
+    );
+}
 
 /*
  * Briefly enlarge both contesting players so the
