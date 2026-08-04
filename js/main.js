@@ -966,6 +966,12 @@ this.opponentPreviousFatigueY =
 this.minimumFatigueSpeedMultiplier =
     0.88;
 
+    /*
+ * At minimum energy, acceleration is reduced to 85%.
+ */
+this.minimumFatigueAccelerationMultiplier =
+    0.85;
+
 /*
  * When the siren sounds during a disposal, the quarter
  * waits until the football is no longer in flight.
@@ -2526,9 +2532,19 @@ const deltaSeconds =
  * Use acceleration while movement input exists.
  * Use stronger deceleration when the controls are released.
  */
+/*
+ * Tired players accelerate and turn slightly more
+ * slowly, but retain normal stopping responsiveness.
+ */
+const fatigueAccelerationMultiplier =
+    this.getFatigueAccelerationMultiplier(
+        this.controlledPlayer
+    );
+
 const velocityChangeRate =
     playerHasMovementInput
-        ? this.playerAcceleration
+        ? this.playerAcceleration *
+            fatigueAccelerationMultiplier
         : this.playerDeceleration;
 
 const maximumVelocityChange =
@@ -3039,6 +3055,35 @@ getFatigueSpeedMultiplier(
 
     return Phaser.Math.Linear(
         this.minimumFatigueSpeedMultiplier,
+        1,
+        fatiguePercentage
+    );
+}
+
+getFatigueAccelerationMultiplier(
+    playerObject
+) {
+    const fatigue =
+        this.getPlayerFatigue(
+            playerObject
+        );
+
+    const fatiguePercentage =
+        Phaser.Math.Clamp(
+            (
+                fatigue -
+                this.minimumFatigue
+            ) /
+            (
+                this.maximumFatigue -
+                this.minimumFatigue
+            ),
+            0,
+            1
+        );
+
+    return Phaser.Math.Linear(
+        this.minimumFatigueAccelerationMultiplier,
         1,
         fatiguePercentage
     );
