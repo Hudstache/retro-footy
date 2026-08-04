@@ -682,6 +682,43 @@ this.footballShadow =
     .setDepth(10)
     .setVisible(false);
 
+    /*
+ * Separate airborne football graphic.
+ *
+ * The original football remains at the logical ground
+ * position used by scoring, boundaries and contests.
+ */
+this.airborneFootball =
+    this.add.ellipse(
+        this.football.x,
+        this.football.y,
+        15,
+        9,
+        0x9a5a2b
+    )
+    .setStrokeStyle(
+        2,
+        0xffffff
+    )
+    .setDepth(12)
+    .setVisible(false);
+
+/*
+ * Genuine gameplay height value.
+ */
+this.footballHeight = 0;
+
+/*
+ * Maximum visual height in pixels.
+ */
+this.maximumKickHeight = 58;
+this.maximumHandballHeight = 22;
+
+/*
+ * The selected height for the current disposal.
+ */
+this.currentMaximumFootballHeight = 0;
+
     // Possession
 /*
  * The player object that currently owns the football.
@@ -2293,7 +2330,7 @@ this.clearPossession();
 
 this.footballInFlight = true;
 
-    /*
+/*
  * Briefly prevent the player from recollecting the
  * disposal as it leaves their hands or boot.
  */
@@ -2331,34 +2368,38 @@ this.footballCanBeMarked = false;
 let powerPercentage;
 
 if (isKick) {
-/*
- * A short deliberate drag produces the minimum
- * handball speed. Longer drags increase its power.
- */
-const effectiveHandballDrag =
-    Math.max(
-        disposalDragDistance,
-        this.minimumPassDrag
-    );
-
-powerPercentage =
-    Phaser.Math.Clamp(
-        (
-            effectiveHandballDrag -
-            this.minimumPassDrag
-        ) /
-        (
-            this.handballKickThreshold -
-            this.minimumPassDrag
-        ),
-        0,
-        1
-    );
-} else {
+    /*
+     * Kicks begin at the kick threshold and increase
+     * toward maximum power.
+     */
     powerPercentage =
         Phaser.Math.Clamp(
             (
                 disposalDragDistance -
+                this.handballKickThreshold
+            ) /
+            (
+                this.maximumPassDrag -
+                this.handballKickThreshold
+            ),
+            0,
+            1
+        );
+} else {
+    /*
+     * Any deliberate short drag produces at least the
+     * minimum handball power.
+     */
+    const effectiveHandballDrag =
+        Math.max(
+            disposalDragDistance,
+            this.minimumPassDrag
+        );
+
+    powerPercentage =
+        Phaser.Math.Clamp(
+            (
+                effectiveHandballDrag -
                 this.minimumPassDrag
             ) /
             (
@@ -2517,14 +2558,63 @@ direction.normalize();
      * Place the football slightly in front of the
      * controlled player before launching it.
      */
+/*
+ * Begin the disposal at the logical ground position
+ * beside the controlled player.
+ */
 this.football.x =
-    this.controlledPlayer.x + 18;
+    this.controlledPlayer.x +
+    direction.x * 18;
 
 this.football.y =
-    this.controlledPlayer.y;
+    this.controlledPlayer.y +
+    direction.y * 18;
 
-    this.footballVelocityX =
-        direction.x * launchSpeed;
+/*
+ * Select the maximum height for this disposal.
+ */
+this.footballHeight = 0;
+
+this.currentMaximumFootballHeight =
+    isKick
+        ? Phaser.Math.Linear(
+            34,
+            this.maximumKickHeight,
+            powerPercentage
+        )
+        : Phaser.Math.Linear(
+            12,
+            this.maximumHandballHeight,
+            powerPercentage
+        );
+
+/*
+ * Hide the logical football while its airborne graphic
+ * displays the visible arc.
+ */
+this.football.setVisible(false);
+
+if (this.airborneFootball) {
+    this.airborneFootball
+        .setPosition(
+            this.football.x,
+            this.football.y
+        )
+        .setScale(1)
+        .setAngle(
+            this.football.angle
+        )
+        .setStrokeStyle(
+            2,
+            isKick
+                ? 0xffd43b
+                : 0x66d9ff
+        )
+        .setVisible(true);
+}
+
+this.footballVelocityX =
+    direction.x * launchSpeed;
 
     this.footballVelocityY =
         direction.y * launchSpeed;
@@ -5031,18 +5121,61 @@ if (direction.length() === 0) {
         ) /
         flightDragPerSecond;
 
-    /*
-     * Green carries and disposes from his left side.
-     */
-    this.football.x =
-        disposingPlayer.x - 18;
+/*
+ * Begin Green's disposal in the selected launch
+ * direction rather than always on his left side.
+ */
+this.football.x =
+    disposingPlayer.x +
+    direction.x * 18;
 
-    this.football.y =
-        disposingPlayer.y;
+this.football.y =
+    disposingPlayer.y +
+    direction.y * 18;
 
-    this.footballVelocityX =
-        direction.x *
-        launchSpeed;
+/*
+ * Give Green the same genuine height system as the
+ * controlled home players.
+ */
+this.footballHeight = 0;
+
+this.currentMaximumFootballHeight =
+    isKick
+        ? Phaser.Math.Linear(
+            34,
+            this.maximumKickHeight,
+            powerPercentage
+        )
+        : Phaser.Math.Linear(
+            12,
+            this.maximumHandballHeight,
+            powerPercentage
+        );
+
+this.football.setVisible(false);
+
+if (this.airborneFootball) {
+    this.airborneFootball
+        .setPosition(
+            this.football.x,
+            this.football.y
+        )
+        .setScale(1)
+        .setAngle(
+            this.football.angle
+        )
+        .setStrokeStyle(
+            2,
+            isKick
+                ? 0xffd43b
+                : 0x66d9ff
+        )
+        .setVisible(true);
+}
+
+this.footballVelocityX =
+    direction.x *
+    launchSpeed;
 
     this.footballVelocityY =
         direction.y *
@@ -6455,51 +6588,73 @@ if (
     this.footballRotationSpeed *=
         rotationDragMultiplier;
 
-   /*
- * Convert flight time into progress from:
+/*
+ * Convert flight time into progress:
  *
- * 0 = launch
+ * 0   = launch
  * 0.5 = apex
- * 1 = landing
+ * 1   = landing
  */
-const flightProgress =
-    this.footballEstimatedFlightDuration > 0
-        ? Phaser.Math.Clamp(
-            this.footballFlightTime /
-                this.footballEstimatedFlightDuration,
-            0,
-            1
-        )
-        : 0;
+const safeFlightDuration =
+    Math.max(
+        0.01,
+        this.footballEstimatedFlightDuration
+    );
 
+const flightProgress =
+    Phaser.Math.Clamp(
+        this.footballFlightTime /
+            safeFlightDuration,
+        0,
+        1
+    );
+
+/*
+ * The sine curve creates a smooth rise and descent.
+ */
 const flightHeightCurve =
     Math.sin(
         flightProgress *
         Math.PI
     );
 
-const maximumScaleIncrease =
-    this.footballFlightType === "KICK"
-        ? 0.24
-        : 0.13;
-
-const flightScale =
-    1 +
+this.footballHeight =
     flightHeightCurve *
-        maximumScaleIncrease;
-
-this.football.setScale(
-    this.footballBaseScaleX *
-        flightScale,
-
-    this.footballBaseScaleY *
-        flightScale
-);
+    this.currentMaximumFootballHeight;
 
 /*
- * Keep the shadow on the football's ground position.
- *
- * It becomes smaller and lighter near the apex.
+ * The logical football remains on the ground plane.
+ * The separate airborne graphic is raised visually.
+ */
+if (this.airborneFootball) {
+    const airborneScale =
+        1 +
+        flightHeightCurve *
+        (
+            this.footballFlightType ===
+                "KICK"
+                ? 0.18
+                : 0.10
+        );
+
+    this.airborneFootball
+        .setPosition(
+            this.football.x,
+            this.football.y -
+                this.footballHeight
+        )
+        .setScale(
+            airborneScale
+        )
+        .setAngle(
+            this.football.angle
+        )
+        .setVisible(true);
+}
+
+/*
+ * The shadow remains at the football's logical ground
+ * position and becomes smaller near the apex.
  */
 if (this.footballShadow) {
     const shadowScaleX =
@@ -6511,8 +6666,8 @@ if (this.footballShadow) {
         flightHeightCurve * 0.25;
 
     const shadowAlpha =
-        0.3 -
-        flightHeightCurve * 0.14;
+        0.30 -
+        flightHeightCurve * 0.18;
 
     this.footballShadow
         .setPosition(
@@ -7025,12 +7180,23 @@ startFootballGroundBounce() {
      * The football is no longer flying through the air,
      * but it keeps moving as it contacts the ground.
      */
-    this.footballInFlight = false;
-    this.footballGroundState = "BOUNCING";
+this.footballInFlight = false;
+this.footballGroundState = "BOUNCING";
 
-    /*
+/*
  * The football has returned to ground level.
  */
+this.footballHeight = 0;
+this.currentMaximumFootballHeight = 0;
+
+this.football.setVisible(true);
+
+if (this.airborneFootball) {
+    this.airborneFootball
+        .setVisible(false)
+        .setScale(1);
+}
+
 if (this.footballShadow) {
     this.footballShadow.setVisible(
         false
@@ -7339,10 +7505,21 @@ updateFootballRolling(deltaSeconds) {
 }
 
 stopFootballFlight() {
-    this.footballInFlight = false;
-    this.footballGroundState = "NONE";
+this.footballInFlight = false;
+this.footballGroundState = "NONE";
 
-    this.footballEstimatedFlightDuration = 0;
+this.footballEstimatedFlightDuration = 0;
+
+this.footballHeight = 0;
+this.currentMaximumFootballHeight = 0;
+
+this.football.setVisible(true);
+
+if (this.airborneFootball) {
+    this.airborneFootball
+        .setVisible(false)
+        .setScale(1);
+}
 
 if (this.footballShadow) {
     this.footballShadow.setVisible(
