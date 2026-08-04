@@ -1699,25 +1699,38 @@ const dragY =
  * The football travels opposite to the drag,
  * matching Retro Bowl's controls.
  */
+/*
+ * Slingshot aiming:
+ *
+ * Pulling left aims right.
+ * Pulling right aims left.
+ * Pulling up aims down.
+ * Pulling down aims up.
+ */
 const aimDirection =
     new Phaser.Math.Vector2(
         -dragX,
         -dragY
     );
-
 if (aimDirection.length() > 0) {
     aimDirection.normalize();
 }
 
-    /*
-     * Horizontal drag controls disposal power.
-     */
-    const horizontalDrag =
-        Phaser.Math.Clamp(
-            Math.abs(dragX),
-            0,
-            this.maximumPassDrag
-        );
+/*
+ * Total drag distance controls disposal power.
+ *
+ * This gives horizontal, vertical and diagonal
+ * disposals the same potential range.
+ */
+const disposalDragDistance =
+    Phaser.Math.Clamp(
+        Math.sqrt(
+            dragX * dragX +
+            dragY * dragY
+        ),
+        0,
+        this.maximumPassDrag
+    );
 
     /*
      * Vertical aiming remains inverted:
@@ -1728,9 +1741,9 @@ if (aimDirection.length() > 0) {
     const aimedVerticalOffset =
         -dragY;
 
-    const isKick =
-        horizontalDrag >=
-        this.handballKickThreshold;
+const isKick =
+    disposalDragDistance >=
+    this.handballKickThreshold;
 
     /*
      * Preview distance grows with disposal power.
@@ -1745,33 +1758,33 @@ if (aimDirection.length() > 0) {
 let previewPowerPercentage;
 
 if (isKick) {
-    previewPowerPercentage =
-        Phaser.Math.Clamp(
-            (
-                horizontalDrag -
-                this.handballKickThreshold
-            ) /
-            (
-                this.maximumPassDrag -
-                this.handballKickThreshold
-            ),
-            0,
-            1
-        );
+previewPowerPercentage =
+    Phaser.Math.Clamp(
+        (
+            disposalDragDistance -
+            this.handballKickThreshold
+        ) /
+        (
+            this.maximumPassDrag -
+            this.handballKickThreshold
+        ),
+        0,
+        1
+    );
 } else {
-    previewPowerPercentage =
-        Phaser.Math.Clamp(
-            (
-                horizontalDrag -
-                this.minimumPassDrag
-            ) /
-            (
-                this.handballKickThreshold -
-                this.minimumPassDrag
-            ),
-            0,
-            1
-        );
+previewPowerPercentage =
+    Phaser.Math.Clamp(
+        (
+            disposalDragDistance -
+            this.minimumPassDrag
+        ) /
+        (
+            this.handballKickThreshold -
+            this.minimumPassDrag
+        ),
+        0,
+        1
+    );
 }
 
 /*
@@ -2019,10 +2032,10 @@ this.aimGraphics.fillCircle(
 
     }
 
-    if (
-        horizontalDrag <
-        this.minimumPassDrag
-    ) {
+if (
+    disposalDragDistance <
+    this.minimumPassDrag
+) {
         this.passTypeText.setText(
             "DRAG TO PASS"
         );
@@ -2055,29 +2068,37 @@ releasePassAim(pointer) {
     const dragY =
         this.aimCurrentY - this.aimStartY;
 
-    const horizontalDrag =
-        Phaser.Math.Clamp(
-            Math.abs(dragX),
-            0,
-            this.maximumPassDrag
-        );
-
-    /*
-     * Cancel very small accidental drags.
-     */
-    if (horizontalDrag < this.minimumPassDrag) {
-        this.cancelPassAim();
-        return;
-    }
-
-    const isKick =
-        horizontalDrag >= this.handballKickThreshold;
-
-    this.launchFootball(
-        horizontalDrag,
-        dragY,
-        isKick
+/*
+ * Use the full drag length so disposal power is equal
+ * in every direction.
+ */
+const disposalDragDistance =
+    Phaser.Math.Clamp(
+        Math.sqrt(
+            dragX * dragX +
+            dragY * dragY
+        ),
+        0,
+        this.maximumPassDrag
     );
+
+if (
+    disposalDragDistance <
+    this.minimumPassDrag
+) {
+    this.cancelPassAim();
+    return;
+}
+
+const isKick =
+    disposalDragDistance >=
+    this.handballKickThreshold;
+
+this.launchFootball(
+    dragX,
+    dragY,
+    isKick
+);
 
     this.cancelPassAim();
 }
@@ -2091,6 +2112,19 @@ cancelPassAim() {
 }
 
 launchFootball(horizontalDrag, verticalDrag, isKick) {
+    /*
+     * Keep the signed drag values for direction, but use
+     * total drag distance when calculating disposal power.
+     */
+    const disposalDragDistance =
+        Phaser.Math.Clamp(
+            Math.sqrt(
+                horizontalDrag * horizontalDrag +
+                verticalDrag * verticalDrag
+            ),
+            0,
+            this.maximumPassDrag
+        );
 if (
     !this.hasHomePossession() ||
     this.possessionOwner !==
@@ -2215,7 +2249,7 @@ if (isKick) {
     powerPercentage =
         Phaser.Math.Clamp(
             (
-                horizontalDrag -
+                disposalDragDistance -
                 this.handballKickThreshold
             ) /
             (
@@ -2229,7 +2263,7 @@ if (isKick) {
     powerPercentage =
         Phaser.Math.Clamp(
             (
-                horizontalDrag -
+                disposalDragDistance -
                 this.minimumPassDrag
             ) /
             (
@@ -2296,6 +2330,10 @@ this.footballEstimatedFlightDuration =
      * Drag down = football travels up.
      * Drag up   = football travels down.
      */
+/*
+ * Launch opposite to the drag direction so the real
+ * disposal follows the slingshot trajectory preview.
+ */
 const disposalVector =
     new Phaser.Math.Vector2(
         -horizontalDrag,
