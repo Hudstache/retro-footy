@@ -778,6 +778,13 @@ this.footballPickupLockTimer = 0;
 this.footballPickupLockDuration = 220;
 
 /*
+ * After a dropped mark or spoil, briefly prevent pickup
+ * so the football visibly reaches the ground before the
+ * loose-ball contest begins.
+ */
+this.contestPickupLockDuration = 180;
+
+/*
  * During a ground bounce, the football can only be
  * collected when it is close to the ground.
  */
@@ -7190,17 +7197,28 @@ if (!secondCandidate) {
          * The football is dropped and becomes a loose
          * ground-ball opportunity.
          */
-        this.footballFlightType =
-            "DROPPED_MARK";
+this.footballFlightType =
+    "DROPPED_MARK";
 
-        this.footballCanBeMarked =
-            false;
+this.footballCanBeMarked =
+    false;
 
-        this.footballVelocityX *=
-            0.30;
+/*
+ * A dropped mark loses most of its forward speed but
+ * continues falling toward the ground.
+ */
+this.footballVelocityX *=
+    0.30;
 
-        this.footballVelocityY *=
-            0.30;
+this.footballVelocityY *=
+    0.30;
+
+/*
+ * Prevent immediate collection while the dropped ball
+ * completes its landing.
+ */
+this.footballPickupLockTimer =
+    this.contestPickupLockDuration;
 
         this.footballRotationSpeed =
             Phaser.Math.FloatBetween(
@@ -7208,13 +7226,28 @@ if (!secondCandidate) {
                 540
             );
 
-        this.passTypeText.setText(
-            "DROPPED MARK"
-        );
+this.passTypeText.setText(
+    "DROPPED MARK"
+);
 
-        console.log(
-            "Uncontested mark dropped."
-        );
+this.time.delayedCall(
+    650,
+    () => {
+        if (
+            this.passTypeText &&
+            this.passTypeText.text ===
+                "DROPPED MARK"
+        ) {
+            this.passTypeText.setText(
+                ""
+            );
+        }
+    }
+);
+
+console.log(
+    "Uncontested mark dropped."
+);
 
         return;
     }
@@ -7260,11 +7293,18 @@ if (
              * Change the flight type so this disposal
              * cannot immediately be marked again.
              */
-            this.footballFlightType =
-                "SPOIL";
+this.footballFlightType =
+    "SPOIL";
 
-            this.footballCanBeMarked =
-                false;
+this.footballCanBeMarked =
+    false;
+
+/*
+ * Prevent either contesting player from instantly
+ * collecting the spoil before it reaches the ground.
+ */
+this.footballPickupLockTimer =
+    this.contestPickupLockDuration;
 
             /*
              * Reduce the forward speed and knock the
@@ -7350,6 +7390,25 @@ this.time.delayedCall(
         secondCandidate.player.setFillStyle(
             originalSecondColour
         );
+    }
+);
+
+this.passTypeText.setText(
+    "SPOIL"
+);
+
+this.time.delayedCall(
+    650,
+    () => {
+        if (
+            this.passTypeText &&
+            this.passTypeText.text ===
+                "SPOIL"
+        ) {
+            this.passTypeText.setText(
+                ""
+            );
+        }
     }
 );
 
@@ -7461,10 +7520,39 @@ this.football.setScale(
      * Give the first bounce enough momentum to remain
      * clearly visible.
      */
-    const firstBounceSpeed =
-        this.footballFlightType === "KICK"
-            ? 105
-            : 68;
+let firstBounceSpeed;
+
+if (
+    this.footballFlightType ===
+    "KICK"
+) {
+    firstBounceSpeed = 105;
+} else if (
+    this.footballFlightType ===
+    "HANDBALL"
+) {
+    firstBounceSpeed = 68;
+} else if (
+    this.footballFlightType ===
+    "SPOIL"
+) {
+    /*
+     * Spoils should deflect into a genuine loose-ball
+     * contest rather than stopping beneath the players.
+     */
+    firstBounceSpeed = 82;
+} else if (
+    this.footballFlightType ===
+    "DROPPED_MARK"
+) {
+    /*
+     * Dropped marks normally fall close to the marking
+     * contest with only limited forward movement.
+     */
+    firstBounceSpeed = 48;
+} else {
+    firstBounceSpeed = 60;
+}
 
     this.footballVelocityX =
         movementDirection.x *
@@ -7478,10 +7566,34 @@ this.football.setScale(
      * Kicks produce a larger first bounce than
      * handballs.
      */
+if (
+    this.footballFlightType ===
+    "KICK"
+) {
     this.footballBounceHeight =
-        this.footballFlightType === "KICK"
-            ? 0.28
-            : 0.17;
+        0.28;
+} else if (
+    this.footballFlightType ===
+    "HANDBALL"
+) {
+    this.footballBounceHeight =
+        0.17;
+} else if (
+    this.footballFlightType ===
+    "SPOIL"
+) {
+    this.footballBounceHeight =
+        0.22;
+} else if (
+    this.footballFlightType ===
+    "DROPPED_MARK"
+) {
+    this.footballBounceHeight =
+        0.14;
+} else {
+    this.footballBounceHeight =
+        0.16;
+}
 }
 
 updateFootballGroundPhysics(delta) {
