@@ -710,11 +710,80 @@ applyCentreFormation() {
             this.field.centreY
         );
 
-        this.footballVelocityX = 0;
-        this.footballVelocityY = 0;
+this.footballVelocityX = 0;
+this.footballVelocityY = 0;
 
-        this.footballGroundState =
-            "NONE";
+this.footballGroundState =
+    "NONE";
+
+/*
+ * Clear every restriction left over from the previous
+ * scoring passage so the centre football can be
+ * collected immediately.
+ */
+this.footballPickupLockTimer = 0;
+
+this.footballInFlight = false;
+this.footballFlightType = null;
+this.footballFlightTime = 0;
+this.footballFlightDistance = 0;
+this.footballCanBeMarked = false;
+
+this.footballBounceCount = 0;
+this.footballGroundBounceTimer = 0;
+
+this.scoreDetected = false;
+this.lastScoreResult = null;
+
+this.footballHeight = 0;
+this.currentMaximumFootballHeight = 0;
+
+this.football.setVisible(true);
+this.football.setScale(
+    this.footballBaseScaleX,
+    this.footballBaseScaleY
+);
+
+this.football.setStrokeStyle(
+    2,
+    0xffffff
+);
+
+if (this.airborneFootball) {
+    this.airborneFootball
+        .setVisible(false)
+        .setScale(1);
+}
+
+if (this.footballShadow) {
+    this.footballShadow
+        .setVisible(false)
+        .setScale(1)
+        .setAlpha(0.3);
+}
+
+/*
+ * Allow immediate possession after a centre restart.
+ */
+this.footballPickupLockTimer = 0;
+this.footballCanBeMarked = true;
+this.footballHeight = 0;
+this.currentMaximumFootballHeight = 0;
+
+this.football.setVisible(true);
+
+if (this.airborneFootball) {
+    this.airborneFootball
+        .setVisible(false)
+        .setScale(1);
+}
+
+if (this.footballShadow) {
+    this.footballShadow
+        .setVisible(false)
+        .setScale(1)
+        .setAlpha(0.3);
+}
     }
 
     /*
