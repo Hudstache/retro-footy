@@ -3938,94 +3938,283 @@ updateTeammateSupport(delta) {
     }
 
     /*
- * During away possession, the supporting home player
- * also moves toward the opponent as a secondary
- * defender.
- */
-if (this.hasAwayPossession()) {
-    const defensiveOffsetY =
-        this.supportPlayer.y <=
-        this.opponent.y
-            ? -34
-            : 34;
+     * During away possession, the supporting home
+     * player moves toward the away ball carrier as a
+     * secondary defender.
+     */
+    if (this.hasAwayPossession()) {
+        const awayBallCarrier =
+            this.possessionOwner;
 
-/*
- * The secondary defender protects the corridor between
- * Green and the home-team goal rather than standing
- * directly beside the contest.
- */
-const defensiveGoalSideOffset = 42;
+        const defensiveOffsetY =
+            this.supportPlayer.y <=
+            awayBallCarrier.y
+                ? -34
+                : 34;
 
-const targetX =
-    this.opponent.x -
-    defensiveGoalSideOffset;
+        const targetX =
+            awayBallCarrier.x + 18;
 
-const targetY =
-    this.opponent.y +
-    defensiveOffsetY;
+        const targetY =
+            awayBallCarrier.y +
+            defensiveOffsetY;
 
-    const correctedTarget =
-        this.getPointInsideField(
-            targetX,
-            targetY
-        );
-
-    const directionToTarget =
-        new Phaser.Math.Vector2(
-            correctedTarget.x -
-                this.supportPlayer.x,
-
-            correctedTarget.y -
-                this.supportPlayer.y
-        );
-
-    const distanceToTarget =
-        directionToTarget.length();
-
-    const stoppingDistance = 30;
-
-    if (
-        distanceToTarget >
-        stoppingDistance
-    ) {
-        directionToTarget.normalize();
-
-        const movementDistance =
-            Math.min(
-                this.teammateData.speed *
-                    (delta / 1000),
-
-                distanceToTarget -
-                    stoppingDistance
+        const correctedTarget =
+            this.getPointInsideField(
+                targetX,
+                targetY
             );
 
-        this.supportPlayer.x +=
-            directionToTarget.x *
-            movementDistance;
+        const directionToTarget =
+            new Phaser.Math.Vector2(
+                correctedTarget.x -
+                    this.supportPlayer.x,
 
-        this.supportPlayer.y +=
-            directionToTarget.y *
-            movementDistance;
+                correctedTarget.y -
+                    this.supportPlayer.y
+            );
+
+        const distanceToTarget =
+            directionToTarget.length();
+
+        const stoppingDistance = 30;
+
+        if (
+            distanceToTarget >
+            stoppingDistance
+        ) {
+            directionToTarget.normalize();
+
+            const movementSpeed =
+                this.teammateData.speed *
+                this.getFatigueSpeedMultiplier(
+                    this.supportPlayer
+                );
+
+            const movementDistance =
+                Math.min(
+                    movementSpeed *
+                        (delta / 1000),
+
+                    distanceToTarget -
+                        stoppingDistance
+                );
+
+            this.supportPlayer.x +=
+                directionToTarget.x *
+                movementDistance;
+
+            this.supportPlayer.y +=
+                directionToTarget.y *
+                movementDistance;
+        }
+
+        this.keepObjectInsideField(
+            this.supportPlayer
+        );
+
+        return;
     }
 
-    this.keepObjectInsideField(
-        this.supportPlayer
-    );
+    /*
+     * During home possession, seek a position that
+     * advances the football toward the right-side goals.
+     */
+    if (this.hasHomePossession()) {
+        const ballCarrier =
+            this.possessionOwner;
 
-    return;
-}
+        const homeScoringEndX =
+            this.field.rightGoalLineX;
 
-/*
- * When nobody has possession and the football is on
- * the ground, the supporting home player automatically
- * chases the loose football.
- *
- * The user still controls the selected home player.
- */
-if (
-    !this.possessionOwner &&
-    !this.footballInFlight
-) {
+        const distanceToScoringEnd =
+            Math.max(
+                0,
+                homeScoringEndX -
+                    ballCarrier.x
+            );
+
+        /*
+         * Use a longer lead in the back half and a
+         * shorter, more controlled lead near goal.
+         */
+        const forwardLeadDistance =
+            Phaser.Math.Clamp(
+                distanceToScoringEnd * 0.28,
+                58,
+                112
+            );
+
+        /*
+         * Choose the side offering the most separation
+         * from the closest Green defender.
+         */
+        const upperOptionY =
+            ballCarrier.y - 62;
+
+        const lowerOptionY =
+            ballCarrier.y + 62;
+
+        const upperDarkGreenDistance =
+            Phaser.Math.Distance.Between(
+                ballCarrier.x +
+                    forwardLeadDistance,
+                upperOptionY,
+                this.opponent.x,
+                this.opponent.y
+            );
+
+        const upperLightGreenDistance =
+            Phaser.Math.Distance.Between(
+                ballCarrier.x +
+                    forwardLeadDistance,
+                upperOptionY,
+                this.awayTeammate.x,
+                this.awayTeammate.y
+            );
+
+        const lowerDarkGreenDistance =
+            Phaser.Math.Distance.Between(
+                ballCarrier.x +
+                    forwardLeadDistance,
+                lowerOptionY,
+                this.opponent.x,
+                this.opponent.y
+            );
+
+        const lowerLightGreenDistance =
+            Phaser.Math.Distance.Between(
+                ballCarrier.x +
+                    forwardLeadDistance,
+                lowerOptionY,
+                this.awayTeammate.x,
+                this.awayTeammate.y
+            );
+
+        const upperSpaceScore =
+            Math.min(
+                upperDarkGreenDistance,
+                upperLightGreenDistance
+            );
+
+        const lowerSpaceScore =
+            Math.min(
+                lowerDarkGreenDistance,
+                lowerLightGreenDistance
+            );
+
+        const selectedTargetY =
+            upperSpaceScore >=
+            lowerSpaceScore
+                ? upperOptionY
+                : lowerOptionY;
+
+        let targetX =
+            ballCarrier.x +
+            forwardLeadDistance;
+
+        let targetY =
+            selectedTargetY;
+
+        /*
+         * Near goal, move into a scoring lane rather
+         * than running beyond the posts.
+         */
+        const maximumAttackingX =
+            homeScoringEndX - 34;
+
+        targetX =
+            Math.min(
+                targetX,
+                maximumAttackingX
+            );
+
+        /*
+         * Do not let the support player fall behind the
+         * ball carrier during normal attacking play.
+         */
+        targetX =
+            Math.max(
+                targetX,
+                ballCarrier.x + 34
+            );
+
+        const correctedTarget =
+            this.getPointInsideField(
+                targetX,
+                targetY
+            );
+
+        targetX =
+            correctedTarget.x;
+
+        targetY =
+            correctedTarget.y;
+
+        this.teammateData.state =
+            "ATTACKING_OPTION";
+
+        this.teammateData.targetX =
+            targetX;
+
+        this.teammateData.targetY =
+            targetY;
+
+        const directionToTarget =
+            new Phaser.Math.Vector2(
+                targetX -
+                    this.supportPlayer.x,
+
+                targetY -
+                    this.supportPlayer.y
+            );
+
+        const distanceToTarget =
+            directionToTarget.length();
+
+        const stoppingDistance = 8;
+
+        if (
+            distanceToTarget >
+            stoppingDistance
+        ) {
+            directionToTarget.normalize();
+
+            const movementSpeed =
+                this.teammateData.speed *
+                this.getFatigueSpeedMultiplier(
+                    this.supportPlayer
+                );
+
+            const movementDistance =
+                Math.min(
+                    movementSpeed *
+                        (delta / 1000),
+
+                    distanceToTarget -
+                        stoppingDistance
+                );
+
+            this.supportPlayer.x +=
+                directionToTarget.x *
+                movementDistance;
+
+            this.supportPlayer.y +=
+                directionToTarget.y *
+                movementDistance;
+        }
+
+        this.keepObjectInsideField(
+            this.supportPlayer
+        );
+
+        return;
+    }
+
+    /*
+     * When the ball is loose, move toward it as the
+     * existing possession system decides who collects.
+     */
     const directionToFootball =
         new Phaser.Math.Vector2(
             this.football.x -
@@ -4038,13 +4227,7 @@ if (
     const distanceToFootball =
         directionToFootball.length();
 
-    /*
-     * Stop slightly inside the normal pickup distance.
-     *
-     * updateFootballPossession() will award possession
-     * when Blue reaches this distance.
-     */
-    const stoppingDistance =
+    const looseBallStoppingDistance =
         Math.max(
             4,
             this.ballPickupDistance - 4
@@ -4052,260 +4235,33 @@ if (
 
     if (
         distanceToFootball >
-        stoppingDistance
+        looseBallStoppingDistance
     ) {
         directionToFootball.normalize();
 
-        /*
-         * Blue moves slightly faster when contesting
-         * a loose football than during normal support.
-         */
-        const looseBallChaseSpeed =
-    31.5 *
-    this.getFatigueSpeedMultiplier(
-        this.supportPlayer
-    );
-        const maximumMovement =
-            looseBallChaseSpeed *
-            (delta / 1000);
+        const movementSpeed =
+            this.teammateData.speed *
+                this.getFatigueSpeedMultiplier(
+                    this.supportPlayer
+                );
 
         const movementDistance =
             Math.min(
-                maximumMovement,
+                movementSpeed *
+                    (delta / 1000),
+
                 distanceToFootball -
-                    stoppingDistance
+                    looseBallStoppingDistance
             );
 
         this.supportPlayer.x +=
             directionToFootball.x *
-            movementDistance;
+                movementDistance;
 
         this.supportPlayer.y +=
             directionToFootball.y *
-            movementDistance;
+                movementDistance;
     }
-
-    this.keepObjectInsideField(
-        this.supportPlayer
-    );
-
-    return;
-}
-
-    /*
-     * The supporting player tries to remain ahead of
-     * the currently controlled player.
-     */
-/*
- * The supporting player creates a dynamic lead based
- * on the ball carrier's position and movement.
- */
-const forwardLeadDistance = 115;
-const sidewaysLeadDistance = 72;
-const trailingOptionDistance = 55;
-
-/*
- * Read the controlled player's current movement
- * direction.
- */
-const carrierMovement =
-    new Phaser.Math.Vector2(
-        this.controlledPlayer
-            .movementVelocityX,
-
-        this.controlledPlayer
-            .movementVelocityY
-    );
-
-const carrierIsMoving =
-    carrierMovement.length() > 3;
-
-if (carrierIsMoving) {
-    carrierMovement.normalize();
-} else {
-    /*
-     * Home currently attacks toward the right.
-     */
-    carrierMovement.set(1, 0);
-}
-
-/*
- * Create a perpendicular direction for a sideways
- * passing option.
- */
-const sidewaysDirection =
-    new Phaser.Math.Vector2(
-        -carrierMovement.y,
-        carrierMovement.x
-    );
-
-/*
- * Prefer the side farther away from Green.
- */
-const upperLeadY =
-    this.controlledPlayer.y -
-    sidewaysLeadDistance;
-
-const lowerLeadY =
-    this.controlledPlayer.y +
-    sidewaysLeadDistance;
-
-const greenDistanceToUpperLead =
-    Phaser.Math.Distance.Between(
-        this.opponent.x,
-        this.opponent.y,
-        this.controlledPlayer.x,
-        upperLeadY
-    );
-
-const greenDistanceToLowerLead =
-    Phaser.Math.Distance.Between(
-        this.opponent.x,
-        this.opponent.y,
-        this.controlledPlayer.x,
-        lowerLeadY
-    );
-
-const leadSide =
-    greenDistanceToUpperLead >=
-    greenDistanceToLowerLead
-        ? -1
-        : 1;
-
-/*
- * Build the main forward-leading position.
- */
-let targetX =
-    this.controlledPlayer.x +
-    carrierMovement.x *
-        forwardLeadDistance +
-    sidewaysDirection.x *
-        sidewaysLeadDistance *
-        leadSide;
-
-let targetY =
-    this.controlledPlayer.y +
-    carrierMovement.y *
-        forwardLeadDistance +
-    sidewaysDirection.y *
-        sidewaysLeadDistance *
-        leadSide;
-
-/*
- * When the ball carrier is close to the attacking
- * boundary, provide a shorter option behind the ball
- * instead of running outside the oval.
- */
-const distanceToAttackingGoal =
-    this.field.rightGoalLineX -
-    this.controlledPlayer.x;
-
-if (
-    distanceToAttackingGoal <
-    forwardLeadDistance + 45
-) {
-    targetX =
-        this.controlledPlayer.x -
-        carrierMovement.x *
-            trailingOptionDistance +
-        sidewaysDirection.x *
-            sidewaysLeadDistance *
-            leadSide;
-
-    targetY =
-        this.controlledPlayer.y -
-        carrierMovement.y *
-            trailingOptionDistance +
-        sidewaysDirection.y *
-            sidewaysLeadDistance *
-            leadSide;
-}
-
-/*
- * Keep the lead inside the playable oval.
- */
-const correctedTarget =
-    this.getPointInsideField(
-        targetX,
-        targetY
-    );
-
-targetX = correctedTarget.x;
-targetY = correctedTarget.y;
-
-this.teammateData.targetX =
-    targetX;
-
-this.teammateData.targetY =
-    targetY;
-
-    const directionToTarget =
-        new Phaser.Math.Vector2(
-            targetX -
-                this.supportPlayer.x,
-
-            targetY -
-                this.supportPlayer.y
-        );
-
-    const distanceToTarget =
-        directionToTarget.length();
-
-/*
- * Stop with a small amount of space around the lead
- * target so Blue does not constantly jitter.
- */
-const stoppingDistance = 10;
-
-    if (
-        distanceToTarget <=
-        stoppingDistance
-    ) {
-        this.keepObjectInsideField(
-            this.supportPlayer
-        );
-
-        return;
-    }
-
-    directionToTarget.normalize();
-
-    const deltaSeconds =
-        delta / 1000;
-
-/*
- * Blue can briefly run at normal off-ball pace while
- * creating a lead.
- */
-const supportFatigueMultiplier =
-    this.getFatigueSpeedMultiplier(
-        this.supportPlayer
-    );
-
-const leadSpeed =
-    Math.max(
-        this.teammateData.speed,
-        this.playerSpeed
-    ) *
-    supportFatigueMultiplier;
-
-const maximumMovement =
-    leadSpeed *
-    deltaSeconds;
-
-    const movementDistance =
-        Math.min(
-            maximumMovement,
-            distanceToTarget
-        );
-
-    this.supportPlayer.x +=
-        directionToTarget.x *
-        movementDistance;
-
-    this.supportPlayer.y +=
-        directionToTarget.y *
-        movementDistance;
 
     this.keepObjectInsideField(
         this.supportPlayer
