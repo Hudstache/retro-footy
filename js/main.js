@@ -6834,65 +6834,123 @@ this.awayTeammatePreviousFatigueY =
 }
 
 restartBallUp() {
-const restartX =
-    this.stoppageX;
+    const restartX =
+        this.stoppageX;
 
-const restartY =
-    this.stoppageY;
+    const restartY =
+        this.stoppageY;
 
-/*
- * A ball-up close to the middle uses the official
- * centre-restart formation.
- */
-const distanceFromCentre =
-    Phaser.Math.Distance.Between(
-        restartX,
-        restartY,
-        this.field.centreX,
-        this.field.centreY
-    );
-
-const isCentreBallUp =
-    distanceFromCentre <= 40;
-
-if (isCentreBallUp) {
-    this.applyCentreFormation();
-} else {
     /*
-     * Field ball-ups remain positioned around the
-     * actual stoppage location.
+     * A ball-up close to the middle uses the shared
+     * centre-restart formation.
      */
-    this.player.setPosition(
-        restartX - 28,
-        restartY
-    );
+    const distanceFromCentre =
+        Phaser.Math.Distance.Between(
+            restartX,
+            restartY,
+            this.field.centreX,
+            this.field.centreY
+        );
 
-    this.opponent.setPosition(
-        restartX + 28,
-        restartY
-    );
+    const isCentreBallUp =
+        distanceFromCentre <= 40;
 
-    this.teammate.setPosition(
-        restartX,
-        restartY + 46
-    );
-}
+    if (isCentreBallUp) {
+        /*
+         * applyCentreFormation() already positions all
+         * four players and resets their movement.
+         */
+        this.applyCentreFormation();
+    } else {
+        /*
+         * Red and dark Green begin closest to the
+         * field ball-up.
+         */
+        this.player.setPosition(
+            restartX - 28,
+            restartY
+        );
 
-    this.keepObjectInsideField(
-        this.player
-    );
+        this.opponent.setPosition(
+            restartX + 28,
+            restartY
+        );
 
-    this.keepObjectInsideField(
-        this.teammate
-    );
+        /*
+         * Blue and light Green begin outside the
+         * contest on opposite sides.
+         */
+        this.teammate.setPosition(
+            restartX,
+            restartY + 48
+        );
 
-    this.keepObjectInsideField(
-        this.opponent
-    );
+        this.awayTeammate.setPosition(
+            restartX,
+            restartY - 48
+        );
+
+        this.keepObjectInsideField(
+            this.player
+        );
+
+        this.keepObjectInsideField(
+            this.teammate
+        );
+
+        this.keepObjectInsideField(
+            this.opponent
+        );
+
+        this.keepObjectInsideField(
+            this.awayTeammate
+        );
+    }
+
+    /*
+     * Remove movement left over from before the
+     * stoppage.
+     */
+    this.player.movementVelocityX = 0;
+    this.player.movementVelocityY = 0;
+
+    this.teammate.movementVelocityX = 0;
+    this.teammate.movementVelocityY = 0;
+
+    this.awayTeammate.movementVelocityX = 0;
+    this.awayTeammate.movementVelocityY = 0;
+
+    /*
+     * Update fatigue reference positions so player
+     * teleportation is not counted as running.
+     */
+    this.playerPreviousFatigueX =
+        this.player.x;
+
+    this.playerPreviousFatigueY =
+        this.player.y;
+
+    this.teammatePreviousFatigueX =
+        this.teammate.x;
+
+    this.teammatePreviousFatigueY =
+        this.teammate.y;
+
+    this.opponentPreviousFatigueX =
+        this.opponent.x;
+
+    this.opponentPreviousFatigueY =
+        this.opponent.y;
+
+    this.awayTeammatePreviousFatigueX =
+        this.awayTeammate.x;
+
+    this.awayTeammatePreviousFatigueY =
+        this.awayTeammate.y;
 
     /*
      * Send the football slightly away from the exact
-     * centre so the nearest player can contest it.
+     * restart point so the nearest player can contest it.
      */
     const randomDirection =
         Phaser.Math.RandomXY(
@@ -6913,6 +6971,7 @@ if (isCentreBallUp) {
         randomDirection.y * 65;
 
     this.footballInFlight = true;
+
     this.footballFlightType =
         "BALL_UP";
 
@@ -6925,6 +6984,28 @@ if (isCentreBallUp) {
 
     this.footballRotationSpeed = 360;
 
+    /*
+     * Ball-ups use a low football height.
+     */
+    this.footballHeight = 0;
+    this.currentMaximumFootballHeight = 16;
+
+    this.football.setVisible(false);
+
+    if (this.airborneFootball) {
+        this.airborneFootball
+            .setPosition(
+                this.football.x,
+                this.football.y
+            )
+            .setScale(1)
+            .setStrokeStyle(
+                2,
+                0xffffff
+            )
+            .setVisible(true);
+    }
+
     this.football.setStrokeStyle(
         2,
         0xffffff
@@ -6936,6 +7017,8 @@ if (isCentreBallUp) {
                 this.football.x,
                 this.football.y + 5
             )
+            .setScale(1)
+            .setAlpha(0.3)
             .setVisible(true);
     }
 
