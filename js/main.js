@@ -3246,6 +3246,13 @@ this.updateAutomaticBounce(
 
 this.keepPlayerInsideField();
 this.updateTeammateSupport(delta);
+
+/*
+ * Decide which Green player pressures and which one
+ * covers before either defender moves.
+ */
+this.updateAwayDefensiveAssignments();
+
 this.updateOpponentChase(delta);
 this.updateAwayTeammateSupport(delta);
 this.updateTeamPressure();
@@ -4289,6 +4296,64 @@ const maximumMovement =
     );
 }
 
+updateAwayDefensiveAssignments() {
+    /*
+     * Keep the current assignments outside home
+     * possession so other away-team behaviours can run.
+     */
+    if (
+        !this.hasHomePossession() ||
+        !this.possessionOwner ||
+        !this.opponent ||
+        !this.awayTeammate
+    ) {
+        this.awayPressurePlayer = null;
+        this.awayCoverPlayer = null;
+
+        return;
+    }
+
+    const ballCarrier =
+        this.possessionOwner;
+
+    const darkGreenDistance =
+        Phaser.Math.Distance.Between(
+            this.opponent.x,
+            this.opponent.y,
+            ballCarrier.x,
+            ballCarrier.y
+        );
+
+    const lightGreenDistance =
+        Phaser.Math.Distance.Between(
+            this.awayTeammate.x,
+            this.awayTeammate.y,
+            ballCarrier.x,
+            ballCarrier.y
+        );
+
+    /*
+     * The closest Green player pressures the carrier.
+     * The other Green player protects the receiver.
+     */
+    if (
+        darkGreenDistance <=
+        lightGreenDistance
+    ) {
+        this.awayPressurePlayer =
+            this.opponent;
+
+        this.awayCoverPlayer =
+            this.awayTeammate;
+    } else {
+        this.awayPressurePlayer =
+            this.awayTeammate;
+
+        this.awayCoverPlayer =
+            this.opponent;
+    }
+}
+
 updateOpponentChase(delta) {
     if (
         !this.opponent ||
@@ -4377,6 +4442,137 @@ const carrySpeed =
 
         return;
     }
+
+    /*
+ * Shared two-defender structure during home
+ * possession.
+ */
+if (this.hasHomePossession()) {
+    const ballCarrier =
+        this.possessionOwner;
+
+    const likelyReceiver =
+        this.supportPlayer;
+
+    let targetX;
+    let targetY;
+
+    if (
+        this.awayPressurePlayer ===
+        this.opponent
+    ) {
+        /*
+         * Dark Green applies direct pressure while
+         * remaining slightly goal-side.
+         */
+        this.opponentData.state =
+            "PRESSURE_CARRIER";
+
+        const goalSideOffset = 24;
+
+        const lateralOffset =
+            this.opponent.y <=
+            ballCarrier.y
+                ? -16
+                : 16;
+
+        targetX =
+            ballCarrier.x +
+            goalSideOffset;
+
+        targetY =
+            ballCarrier.y +
+            lateralOffset;
+    } else {
+        /*
+         * Dark Green protects the likely receiving
+         * player and the passing lane.
+         */
+        this.opponentData.state =
+            "COVER_RECEIVER";
+
+        const receiverTargetX =
+            this.teammateData?.targetX ??
+            likelyReceiver.x;
+
+        const receiverTargetY =
+            this.teammateData?.targetY ??
+            likelyReceiver.y;
+
+        targetX =
+            Phaser.Math.Linear(
+                ballCarrier.x,
+                receiverTargetX,
+                0.68
+            ) + 22;
+
+        targetY =
+            Phaser.Math.Linear(
+                ballCarrier.y,
+                receiverTargetY,
+                0.68
+            );
+    }
+
+    const correctedTarget =
+        this.getPointInsideField(
+            targetX,
+            targetY
+        );
+
+    const directionToTarget =
+        new Phaser.Math.Vector2(
+            correctedTarget.x -
+                this.opponent.x,
+
+            correctedTarget.y -
+                this.opponent.y
+        );
+
+    const distanceToTarget =
+        directionToTarget.length();
+
+    const stoppingDistance =
+        this.awayPressurePlayer ===
+            this.opponent
+            ? 10
+            : 16;
+
+    if (
+        distanceToTarget >
+        stoppingDistance
+    ) {
+        directionToTarget.normalize();
+
+        const movementSpeed =
+            this.opponentData.speed *
+            this.getFatigueSpeedMultiplier(
+                this.opponent
+            );
+
+        const movementDistance =
+            Math.min(
+                movementSpeed *
+                    deltaSeconds,
+                distanceToTarget -
+                    stoppingDistance
+            );
+
+        this.opponent.x +=
+            directionToTarget.x *
+            movementDistance;
+
+        this.opponent.y +=
+            directionToTarget.y *
+            movementDistance;
+    }
+
+    this.keepObjectInsideField(
+        this.opponent
+    );
+
+    return;
+}
 
     /*
      * Chase the home ball carrier during home
@@ -4961,31 +5157,89 @@ updateAwayTeammateSupport(delta) {
             targetY;
     }
 
-    /*
-     * During home possession, provide defensive support
-     * behind the primary defender.
-     */
-    else if (this.hasHomePossession()) {
+/*
+ * During home possession, follow the shared pressure
+ * and coverage assignments.
+ */
+else if (this.hasHomePossession()) {
+    const ballCarrier =
+        this.possessionOwner;
 
+    const likelyReceiver =
+        this.supportPlayer;
+
+    let targetX;
+    let targetY;
+
+    if (
+        this.awayPressurePlayer ===
+        this.awayTeammate
+    ) {
+        /*
+         * Light Green applies direct pressure while
+         * staying slightly goal-side.
+         */
         this.awayTeammateData.state =
-            "SUPPORT";
+            "PRESSURE_CARRIER";
 
-        const targetX =
-            this.opponent.x + 55;
+        const goalSideOffset = 24;
 
-        const targetY =
+        const lateralOffset =
+            this.awayTeammate.y <=
+            ballCarrier.y
+                ? -16
+                : 16;
+
+        targetX =
+            ballCarrier.x +
+            goalSideOffset;
+
+        targetY =
+            ballCarrier.y +
+            lateralOffset;
+    } else {
+        /*
+         * Light Green protects the receiver and blocks
+         * the most likely disposal lane.
+         */
+        this.awayTeammateData.state =
+            "COVER_RECEIVER";
+
+        const receiverTargetX =
+            this.teammateData?.targetX ??
+            likelyReceiver.x;
+
+        const receiverTargetY =
+            this.teammateData?.targetY ??
+            likelyReceiver.y;
+
+        targetX =
             Phaser.Math.Linear(
-                this.opponent.y,
-                this.field.centreY,
-                0.45
+                ballCarrier.x,
+                receiverTargetX,
+                0.68
+            ) + 22;
+
+        targetY =
+            Phaser.Math.Linear(
+                ballCarrier.y,
+                receiverTargetY,
+                0.68
             );
-
-        this.awayTeammateData.targetX =
-            targetX;
-
-        this.awayTeammateData.targetY =
-            targetY;
     }
+
+    const correctedTarget =
+        this.getPointInsideField(
+            targetX,
+            targetY
+        );
+
+    this.awayTeammateData.targetX =
+        correctedTarget.x;
+
+    this.awayTeammateData.targetY =
+        correctedTarget.y;
+}
 
     /*
      * When the football is loose, continue using the
