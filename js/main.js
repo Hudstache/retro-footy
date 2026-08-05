@@ -8271,13 +8271,57 @@ if (
     return;
 }
 
-    let defender = null;
+let defender = null;
 
-    if (this.hasAwayPossession()) {
-        defender = this.controlledPlayer;
-    } else if (this.hasHomePossession()) {
-        defender = this.opponent;
+if (this.hasAwayPossession()) {
+    /*
+     * The user controls the selected home defender
+     * against whichever Green player has possession.
+     */
+    defender =
+        this.controlledPlayer;
+} else if (this.hasHomePossession()) {
+    /*
+     * Once a tackle has started, keep using the same
+     * Green tackler until the contest is resolved.
+     */
+    if (
+        this.isTackleActive &&
+        this.activeTackler &&
+        this.isAwayPlayer(
+            this.activeTackler
+        )
+    ) {
+        defender =
+            this.activeTackler;
+    } else {
+        /*
+         * Compare both Green defenders and select the
+         * one closest to the home ball carrier.
+         */
+        const darkGreenDistance =
+            Phaser.Math.Distance.Between(
+                this.opponent.x,
+                this.opponent.y,
+                this.possessionOwner.x,
+                this.possessionOwner.y
+            );
+
+        const lightGreenDistance =
+            Phaser.Math.Distance.Between(
+                this.awayTeammate.x,
+                this.awayTeammate.y,
+                this.possessionOwner.x,
+                this.possessionOwner.y
+            );
+
+        defender =
+            darkGreenDistance <=
+            lightGreenDistance
+                ? this.opponent
+                : this.awayTeammate;
     }
+}
 
     if (!defender) {
         this.isTackleActive = false;
