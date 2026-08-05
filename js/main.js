@@ -6447,18 +6447,39 @@ startOutOnFullFreeKick(
      */
     let freeKickReceiver;
 
-    if (
-        this.isHomePlayer(
-            this.lastDisposalPlayer
-        )
-    ) {
-        /*
-         * A home-player kick went out on the full,
-         * so Green receives the free kick.
-         */
-        freeKickReceiver =
-            this.opponent;
-    } else {
+if (
+    this.isHomePlayer(
+        this.lastDisposalPlayer
+    )
+) {
+    /*
+     * A home-player kick went out on the full.
+     *
+     * Award the free kick to whichever Green player
+     * is closest to the boundary location.
+     */
+    const darkGreenDistance =
+        Phaser.Math.Distance.Between(
+            this.opponent.x,
+            this.opponent.y,
+            boundaryX,
+            boundaryY
+        );
+
+    const lightGreenDistance =
+        Phaser.Math.Distance.Between(
+            this.awayTeammate.x,
+            this.awayTeammate.y,
+            boundaryX,
+            boundaryY
+        );
+
+    freeKickReceiver =
+        darkGreenDistance <=
+        lightGreenDistance
+            ? this.opponent
+            : this.awayTeammate;
+} else {
         /*
          * Green's kick went out on the full.
          * Award the free kick to the nearest home player.
@@ -6539,52 +6560,227 @@ startOutOnFullFreeKick(
      * Stop the other players from standing directly
      * on the free-kick receiver.
      */
-    const oppositionSpacing = 44;
+/*
+ * Position the remaining players around the free kick.
+ *
+ * One opposition player stands the mark while the
+ * other two players provide wider support and coverage.
+ */
+const oppositionSpacing = 44;
+const supportSpacing = 64;
+const sidewaysSpacing = 38;
 
-    if (freeKickReceiver === this.opponent) {
-        this.player.setPosition(
-            freeKickX +
-                inwardDirection.x *
+const sidewaysDirection =
+    new Phaser.Math.Vector2(
+        -inwardDirection.y,
+        inwardDirection.x
+    );
+
+if (this.isAwayPlayer(freeKickReceiver)) {
+    /*
+     * Away-team free kick.
+     *
+     * The nearest home player stands the mark.
+     */
+    const redDistance =
+        Phaser.Math.Distance.Between(
+            this.player.x,
+            this.player.y,
+            freeKickX,
+            freeKickY
+        );
+
+    const blueDistance =
+        Phaser.Math.Distance.Between(
+            this.teammate.x,
+            this.teammate.y,
+            freeKickX,
+            freeKickY
+        );
+
+    const playerOnMark =
+        redDistance <= blueDistance
+            ? this.player
+            : this.teammate;
+
+    const homeSupportPlayer =
+        playerOnMark === this.player
+            ? this.teammate
+            : this.player;
+
+    const awaySupportPlayer =
+        freeKickReceiver === this.opponent
+            ? this.awayTeammate
+            : this.opponent;
+
+    playerOnMark.setPosition(
+        freeKickX +
+            inwardDirection.x *
                 oppositionSpacing,
 
-            freeKickY +
-                inwardDirection.y *
+        freeKickY +
+            inwardDirection.y *
                 oppositionSpacing
+    );
+
+    homeSupportPlayer.setPosition(
+        freeKickX +
+            inwardDirection.x *
+                supportSpacing +
+            sidewaysDirection.x *
+                sidewaysSpacing,
+
+        freeKickY +
+            inwardDirection.y *
+                supportSpacing +
+            sidewaysDirection.y *
+                sidewaysSpacing
+    );
+
+    awaySupportPlayer.setPosition(
+        freeKickX -
+            inwardDirection.x *
+                46 -
+            sidewaysDirection.x *
+                sidewaysSpacing,
+
+        freeKickY -
+            inwardDirection.y *
+                46 -
+            sidewaysDirection.y *
+                sidewaysSpacing
+    );
+} else {
+    /*
+     * Home-team free kick.
+     *
+     * The nearest Green player stands the mark.
+     */
+    const darkGreenDistance =
+        Phaser.Math.Distance.Between(
+            this.opponent.x,
+            this.opponent.y,
+            freeKickX,
+            freeKickY
         );
 
-        this.teammate.setPosition(
-            freeKickX +
-                inwardDirection.x *
-                60,
-
-            freeKickY +
-                inwardDirection.y *
-                60 +
-                34
+    const lightGreenDistance =
+        Phaser.Math.Distance.Between(
+            this.awayTeammate.x,
+            this.awayTeammate.y,
+            freeKickX,
+            freeKickY
         );
-    } else {
-        this.opponent.setPosition(
-            freeKickX +
-                inwardDirection.x *
+
+    const playerOnMark =
+        darkGreenDistance <=
+        lightGreenDistance
+            ? this.opponent
+            : this.awayTeammate;
+
+    const awaySupportPlayer =
+        playerOnMark === this.opponent
+            ? this.awayTeammate
+            : this.opponent;
+
+    const homeSupportPlayer =
+        freeKickReceiver === this.player
+            ? this.teammate
+            : this.player;
+
+    playerOnMark.setPosition(
+        freeKickX +
+            inwardDirection.x *
                 oppositionSpacing,
 
-            freeKickY +
-                inwardDirection.y *
+        freeKickY +
+            inwardDirection.y *
                 oppositionSpacing
-        );
-    }
-
-    this.keepObjectInsideField(
-        this.player
     );
 
-    this.keepObjectInsideField(
-        this.teammate
+    awaySupportPlayer.setPosition(
+        freeKickX +
+            inwardDirection.x *
+                supportSpacing -
+            sidewaysDirection.x *
+                sidewaysSpacing,
+
+        freeKickY +
+            inwardDirection.y *
+                supportSpacing -
+            sidewaysDirection.y *
+                sidewaysSpacing
     );
 
-    this.keepObjectInsideField(
-        this.opponent
+    homeSupportPlayer.setPosition(
+        freeKickX -
+            inwardDirection.x *
+                46 +
+            sidewaysDirection.x *
+                sidewaysSpacing,
+
+        freeKickY -
+            inwardDirection.y *
+                46 +
+            sidewaysDirection.y *
+                sidewaysSpacing
     );
+}
+
+this.keepObjectInsideField(
+    this.player
+);
+
+this.keepObjectInsideField(
+    this.teammate
+);
+
+this.keepObjectInsideField(
+    this.opponent
+);
+
+this.keepObjectInsideField(
+    this.awayTeammate
+);
+
+/*
+ * Remove movement left over from before the free kick.
+ */
+this.player.movementVelocityX = 0;
+this.player.movementVelocityY = 0;
+
+this.teammate.movementVelocityX = 0;
+this.teammate.movementVelocityY = 0;
+
+this.awayTeammate.movementVelocityX = 0;
+this.awayTeammate.movementVelocityY = 0;
+
+/*
+ * Update fatigue tracking after teleporting players.
+ */
+this.playerPreviousFatigueX =
+    this.player.x;
+
+this.playerPreviousFatigueY =
+    this.player.y;
+
+this.teammatePreviousFatigueX =
+    this.teammate.x;
+
+this.teammatePreviousFatigueY =
+    this.teammate.y;
+
+this.opponentPreviousFatigueX =
+    this.opponent.x;
+
+this.opponentPreviousFatigueY =
+    this.opponent.y;
+
+this.awayTeammatePreviousFatigueX =
+    this.awayTeammate.x;
+
+this.awayTeammatePreviousFatigueY =
+    this.awayTeammate.y;
 
     this.resetTouchMovement();
     this.cancelPassAim();
