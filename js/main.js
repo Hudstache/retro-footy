@@ -3240,6 +3240,7 @@ this.updateAutomaticBounce(
 this.keepPlayerInsideField();
 this.updateTeammateSupport(delta);
 this.updateOpponentChase(delta);
+this.updateAwayTeammateLooseBall(delta);
 this.updateTeamPressure();
 this.updateAIDisposal();
 this.updateFootballFlight(delta);
@@ -4875,6 +4876,104 @@ this.opponent.y +=
 this.keepObjectInsideField(
     this.opponent
 );
+}
+
+updateAwayTeammateLooseBall(delta) {
+    if (
+        !this.awayTeammate ||
+        !this.football
+    ) {
+        return;
+    }
+
+    /*
+     * This step only gives the lighter Green player
+     * loose-ball behaviour.
+     *
+     * Attacking leads, defensive coverage and carrying
+     * movement are added in later steps.
+     */
+    if (
+        this.possessionOwner ||
+        this.footballInFlight ||
+        this.stoppageActive
+    ) {
+        this.awayTeammateData.state =
+            "HOLD_POSITION";
+
+        return;
+    }
+
+    this.awayTeammateData.state =
+        "CHASE_LOOSE";
+
+    const directionToFootball =
+        new Phaser.Math.Vector2(
+            this.football.x -
+                this.awayTeammate.x,
+
+            this.football.y -
+                this.awayTeammate.y
+        );
+
+    const distanceToFootball =
+        directionToFootball.length();
+
+    /*
+     * Stop slightly inside the normal pickup distance.
+     * updateFootballPossession() will then award the ball
+     * to whichever player is closest.
+     */
+    const stoppingDistance =
+        Math.max(
+            4,
+            this.ballPickupDistance - 4
+        );
+
+    if (
+        distanceToFootball <=
+        stoppingDistance
+    ) {
+        this.keepObjectInsideField(
+            this.awayTeammate
+        );
+
+        return;
+    }
+
+    directionToFootball.normalize();
+
+    const fatigueMultiplier =
+        this.getFatigueSpeedMultiplier(
+            this.awayTeammate
+        );
+
+    const looseBallChaseSpeed =
+        31.5 *
+        fatigueMultiplier;
+
+    const maximumMovement =
+        looseBallChaseSpeed *
+        (delta / 1000);
+
+    const movementDistance =
+        Math.min(
+            maximumMovement,
+            distanceToFootball -
+                stoppingDistance
+        );
+
+    this.awayTeammate.x +=
+        directionToFootball.x *
+        movementDistance;
+
+    this.awayTeammate.y +=
+        directionToFootball.y *
+        movementDistance;
+
+    this.keepObjectInsideField(
+        this.awayTeammate
+    );
 }
 
 updateTeamPressure() {
@@ -6610,30 +6709,55 @@ if (this.scoreDetected) {
         });
     }
 
-    const opponentDistance =
-        Phaser.Math.Distance.Between(
-            this.opponent.x,
-            this.opponent.y,
-            this.football.x,
-            this.football.y
-        );
+const opponentDistance =
+    Phaser.Math.Distance.Between(
+        this.opponent.x,
+        this.opponent.y,
+        this.football.x,
+        this.football.y
+    );
 
-    if (
-        opponentDistance <=
-        this.ballPickupDistance
-    ) {
-        pickupCandidates.push({
-            player:
-                this.opponent,
+if (
+    opponentDistance <=
+    this.ballPickupDistance
+) {
+    pickupCandidates.push({
+        player:
+            this.opponent,
 
-            distance:
-                opponentDistance
-        });
-    }
+        distance:
+            opponentDistance
+    });
+}
 
-    if (pickupCandidates.length === 0) {
-        return;
-    }
+/*
+ * Include the lighter Green player in loose-ball
+ * possession contests.
+ */
+const awayTeammateDistance =
+    Phaser.Math.Distance.Between(
+        this.awayTeammate.x,
+        this.awayTeammate.y,
+        this.football.x,
+        this.football.y
+    );
+
+if (
+    awayTeammateDistance <=
+    this.ballPickupDistance
+) {
+    pickupCandidates.push({
+        player:
+            this.awayTeammate,
+
+        distance:
+            awayTeammateDistance
+    });
+}
+
+if (pickupCandidates.length === 0) {
+    return;
+}
 
     /*
      * When several players reach the football together,
