@@ -9136,37 +9136,50 @@ this.tweens.add({
 
 /*
  * Briefly flash both players.
+ *
+ * Store the actual player objects involved in the
+ * tackle. Possession may be cleared if the carrier
+ * disposes before this delayed reset runs.
  */
+const tacklingPlayer =
+    defender;
+
+const tackledPlayer =
+    this.possessionOwner;
+
 const defenderOriginalColour =
-    defender.fillColor;
+    tacklingPlayer.fillColor;
 
 const carrierOriginalColour =
-    this.possessionOwner.fillColor;
+    tackledPlayer.fillColor;
 
-defender.setFillStyle(
+tacklingPlayer.setFillStyle(
     0xffffff
 );
 
-this.possessionOwner.setFillStyle(
+tackledPlayer.setFillStyle(
     0xffffff
 );
 
 this.time.delayedCall(
     100,
     () => {
-
-        defender.setFillStyle(
-            defenderOriginalColour
-        );
-
-        if (this.possessionOwner) {
-
-            this.possessionOwner.setFillStyle(
-                carrierOriginalColour
+        /*
+         * Restore the exact players that began the
+         * tackle rather than relying on the current
+         * possession owner.
+         */
+        if (tacklingPlayer) {
+            tacklingPlayer.setFillStyle(
+                defenderOriginalColour
             );
-
         }
 
+        if (tackledPlayer) {
+            tackledPlayer.setFillStyle(
+                carrierOriginalColour
+            );
+        }
     }
 );
 
