@@ -1244,6 +1244,7 @@ this.footballCanBeMarked = false;
  */
 this.scoreDetected = false;
 this.lastScoreResult = null;
+this.lastScoringTeam = null;
 
 /*
  * Match scoring.
@@ -5631,8 +5632,20 @@ launchAIFootball(
         return;
     }
 
-    const disposingPlayer =
-        this.opponent;
+/*
+ * Either Green player may currently own the football.
+ */
+const disposingPlayer =
+    this.possessionOwner;
+
+if (
+    !disposingPlayer ||
+    !this.isAwayPlayer(
+        disposingPlayer
+    )
+) {
+    return;
+}
 
         /*
  * An AI disposal ends Green's free-kick protection.
@@ -7740,14 +7753,40 @@ if (currentSpeed <= stoppingSpeed) {
 }
 
 updateScoreboard() {
+    /*
+     * Add the score to the team that completed the
+     * scoring kick.
+     */
     if (
-        this.lastScoreResult === "GOAL"
+        this.lastScoringTeam ===
+        "HOME"
     ) {
-        this.homeGoals++;
+        if (
+            this.lastScoreResult ===
+            "GOAL"
+        ) {
+            this.homeGoals++;
+        } else if (
+            this.lastScoreResult ===
+            "BEHIND"
+        ) {
+            this.homeBehinds++;
+        }
     } else if (
-        this.lastScoreResult === "BEHIND"
+        this.lastScoringTeam ===
+        "AWAY"
     ) {
-        this.homeBehinds++;
+        if (
+            this.lastScoreResult ===
+            "GOAL"
+        ) {
+            this.awayGoals++;
+        } else if (
+            this.lastScoreResult ===
+            "BEHIND"
+        ) {
+            this.awayBehinds++;
+        }
     }
 
     const homeTotal =
@@ -7775,7 +7814,7 @@ updateScoreDetection(
     }
 
     /*
-     * Only kicks can currently register scores.
+     * Only kicks can register goals or behinds.
      */
     if (
         this.footballFlightType !==
@@ -7786,14 +7825,15 @@ updateScoreDetection(
 
     const {
         centreY,
+        leftGoalLineX,
         rightGoalLineX,
         goalPostOffset,
         behindPostOffset
     } = this.field;
 
     /*
-     * Detect the exact frame where the football crosses
-     * from inside the field to beyond the goal line.
+     * Home attacks toward the right.
+     * Away attacks toward the left.
      */
     const crossedRightGoalLine =
         previousFootballX <
@@ -7801,7 +7841,50 @@ updateScoreDetection(
         this.football.x >=
             rightGoalLineX;
 
-    if (!crossedRightGoalLine) {
+    const crossedLeftGoalLine =
+        previousFootballX >
+            leftGoalLineX &&
+        this.football.x <=
+            leftGoalLineX;
+
+    if (
+        !crossedRightGoalLine &&
+        !crossedLeftGoalLine
+    ) {
+        return;
+    }
+
+    /*
+     * The disposal player determines which team can
+     * receive the score.
+     */
+    const kickWasHomeDisposal =
+        this.isHomePlayer(
+            this.lastDisposalPlayer
+        );
+
+    const kickWasAwayDisposal =
+        this.isAwayPlayer(
+            this.lastDisposalPlayer
+        );
+
+    /*
+     * Ignore a kick crossing the wrong scoring end.
+     *
+     * Home scores only at the right-side goals.
+     * Away scores only at the left-side goals.
+     */
+    if (
+        crossedRightGoalLine &&
+        !kickWasHomeDisposal
+    ) {
+        return;
+    }
+
+    if (
+        crossedLeftGoalLine &&
+        !kickWasAwayDisposal
+    ) {
         return;
     }
 
@@ -7811,80 +7894,107 @@ updateScoreDetection(
             centreY
         );
 
-    let scoreResult = "MISS";
+    let scoreResult =
+        "MISS";
 
     if (
         distanceFromGoalCentre <
         goalPostOffset
     ) {
-        scoreResult = "GOAL";
+        scoreResult =
+            "GOAL";
     } else if (
         distanceFromGoalCentre <
         behindPostOffset
     ) {
-        scoreResult = "BEHIND";
+        scoreResult =
+            "BEHIND";
     }
 
     this.scoreDetected = true;
+
     this.lastScoreResult =
         scoreResult;
 
-        /*
- * Update the scoreboard immediately.
- */
-this.updateScoreboard();
+    this.lastScoringTeam =
+        crossedRightGoalLine
+            ? "HOME"
+            : "AWAY";
 
     /*
-     * Stop the football on the scoring line.
-     *
-     * Step 15N will add the scoreboard update and
-     * restart sequence.
+     * Only goals and behinds change the scoreboard.
+     */
+    if (
+        scoreResult === "GOAL" ||
+        scoreResult === "BEHIND"
+    ) {
+        this.updateScoreboard();
+    }
+
+    /*
+     * Stop the football on the goal line it crossed.
      */
     this.football.x =
-        rightGoalLineX;
+        crossedRightGoalLine
+            ? rightGoalLineX
+            : leftGoalLineX;
 
     this.stopFootballFlight();
 
-    /*
- * Keep the result visible until the scoreboard and
- * restart system is added in Step 15N.
- */
-this.time.delayedCall(
-    1500,
-    () => {
+    if (
+        scoreResult === "GOAL"
+    ) {
+        this.passTypeText.setText(
+            this.lastScoringTeam ===
+                "HOME"
+                ? "HOME GOAL!"
+                : "AWAY GOAL!"
+        );
 
-        if (this.passTypeText) {
-            this.passTypeText.setText("");
-        }
+        console.log(
+            `${this.lastScoringTeam} GOAL!`
+        );
+    } else if (
+        scoreResult === "BEHIND"
+    ) {
+        this.passTypeText.setText(
+            this.lastScoringTeam ===
+                "HOME"
+                ? "HOME BEHIND"
+                : "AWAY BEHIND"
+        );
 
-        this.restartAfterScore();
+        console.log(
+            `${this.lastScoringTeam} BEHIND.`
+        );
+    } else {
+        this.passTypeText.setText(
+            "MISSED"
+        );
 
+        console.log(
+            "The shot missed the scoring posts."
+        );
     }
-);
 
-if (scoreResult === "GOAL") {
-    this.passTypeText.setText(
-        "GOAL!"
-    );
+    /*
+     * Keep the result visible before returning play to
+     * the shared centre formation.
+     */
+    this.time.delayedCall(
+        1500,
+        () => {
+            if (
+                this.passTypeText
+            ) {
+                this.passTypeText.setText(
+                    ""
+                );
+            }
 
-    console.log("GOAL!");
-} else if (
-    scoreResult === "BEHIND"
-) {
-    this.passTypeText.setText(
-        "BEHIND"
+            this.restartAfterScore();
+        }
     );
-
-    console.log("BEHIND.");
-} else {
-    this.passTypeText.setText(
-        "MISSED"
-    );
-
-    console.log(
-        "The shot missed the scoring posts."
-    );
-}
 }
 
 restartAfterScore() {
@@ -7896,8 +8006,9 @@ restartAfterScore() {
         this.quarterBreakActive ||
         this.matchFinished
     ) {
-        this.scoreDetected = false;
-        this.lastScoreResult = null;
+this.scoreDetected = false;
+this.lastScoreResult = null;
+this.lastScoringTeam = null;
 
         return;
     }
