@@ -3247,7 +3247,7 @@ this.updateAutomaticBounce(
 this.keepPlayerInsideField();
 this.updateTeammateSupport(delta);
 this.updateOpponentChase(delta);
-this.updateAwayTeammateLooseBall(delta);
+this.updateAwayTeammateSupport(delta);
 this.updateTeamPressure();
 this.updateAIDisposal();
 this.updateFootballFlight(delta);
@@ -4885,62 +4885,138 @@ this.keepObjectInsideField(
 );
 }
 
-updateAwayTeammateLooseBall(delta) {
+updateAwayTeammateSupport(delta) {
     if (
         !this.awayTeammate ||
-        !this.football
+        !this.awayTeammateData
     ) {
         return;
+    }
+
+    const deltaSeconds =
+        delta / 1000;
+
+    /*
+     * When Green has possession, the lighter Green
+     * player creates a forward leading option.
+     */
+    if (this.hasAwayPossession()) {
+
+        this.awayTeammateData.state =
+            "LEAD";
+
+        const ballCarrier =
+            this.possessionOwner;
+
+        const forwardLeadDistance = 90;
+        const sidewaysDistance = 55;
+
+        const movementDirection =
+            new Phaser.Math.Vector2(
+                -1,
+                0
+            );
+
+        const sidewaysDirection =
+            new Phaser.Math.Vector2(
+                0,
+                1
+            );
+
+        const leadSide =
+            this.awayTeammate.y <
+            ballCarrier.y
+                ? -1
+                : 1;
+
+        let targetX =
+            ballCarrier.x +
+            movementDirection.x *
+                forwardLeadDistance +
+            sidewaysDirection.x *
+                sidewaysDistance *
+                leadSide;
+
+        let targetY =
+            ballCarrier.y +
+            movementDirection.y *
+                forwardLeadDistance +
+            sidewaysDirection.y *
+                sidewaysDistance *
+                leadSide;
+
+        const correctedTarget =
+            this.getPointInsideField(
+                targetX,
+                targetY
+            );
+
+        targetX = correctedTarget.x;
+        targetY = correctedTarget.y;
+
+        this.awayTeammateData.targetX =
+            targetX;
+
+        this.awayTeammateData.targetY =
+            targetY;
     }
 
     /*
-     * This step only gives the lighter Green player
-     * loose-ball behaviour.
-     *
-     * Attacking leads, defensive coverage and carrying
-     * movement are added in later steps.
+     * During home possession, provide defensive support
+     * behind the primary defender.
      */
-    if (
-        this.possessionOwner ||
-        this.footballInFlight ||
-        this.stoppageActive
-    ) {
-        this.awayTeammateData.state =
-            "HOLD_POSITION";
+    else if (this.hasHomePossession()) {
 
-        return;
+        this.awayTeammateData.state =
+            "SUPPORT";
+
+        const targetX =
+            this.opponent.x + 55;
+
+        const targetY =
+            Phaser.Math.Linear(
+                this.opponent.y,
+                this.field.centreY,
+                0.45
+            );
+
+        this.awayTeammateData.targetX =
+            targetX;
+
+        this.awayTeammateData.targetY =
+            targetY;
     }
 
-    this.awayTeammateData.state =
-        "CHASE_LOOSE";
+    /*
+     * When the football is loose, continue using the
+     * existing loose-ball behaviour.
+     */
+    else {
 
-    const directionToFootball =
+        this.awayTeammateData.state =
+            "CHASE_LOOSE";
+
+        this.awayTeammateData.targetX =
+            this.football.x;
+
+        this.awayTeammateData.targetY =
+            this.football.y;
+    }
+
+    const direction =
         new Phaser.Math.Vector2(
-            this.football.x -
+            this.awayTeammateData.targetX -
                 this.awayTeammate.x,
 
-            this.football.y -
+            this.awayTeammateData.targetY -
                 this.awayTeammate.y
         );
 
-    const distanceToFootball =
-        directionToFootball.length();
+    const distance =
+        direction.length();
 
-    /*
-     * Stop slightly inside the normal pickup distance.
-     * updateFootballPossession() will then award the ball
-     * to whichever player is closest.
-     */
-    const stoppingDistance =
-        Math.max(
-            4,
-            this.ballPickupDistance - 4
-        );
+    if (distance <= 8) {
 
-    if (
-        distanceToFootball <=
-        stoppingDistance
-    ) {
         this.keepObjectInsideField(
             this.awayTeammate
         );
@@ -4948,35 +5024,28 @@ updateAwayTeammateLooseBall(delta) {
         return;
     }
 
-    directionToFootball.normalize();
+    direction.normalize();
 
-    const fatigueMultiplier =
+    const movementSpeed =
+        this.awayTeammateData.speed *
         this.getFatigueSpeedMultiplier(
             this.awayTeammate
         );
 
-    const looseBallChaseSpeed =
-        31.5 *
-        fatigueMultiplier;
-
-    const maximumMovement =
-        looseBallChaseSpeed *
-        (delta / 1000);
-
-    const movementDistance =
+    const movement =
         Math.min(
-            maximumMovement,
-            distanceToFootball -
-                stoppingDistance
+            movementSpeed *
+                deltaSeconds,
+            distance
         );
 
     this.awayTeammate.x +=
-        directionToFootball.x *
-        movementDistance;
+        direction.x *
+        movement;
 
     this.awayTeammate.y +=
-        directionToFootball.y *
-        movementDistance;
+        direction.y *
+        movement;
 
     this.keepObjectInsideField(
         this.awayTeammate
