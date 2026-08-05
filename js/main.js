@@ -413,8 +413,8 @@ hasHomePossession() {
 
 hasAwayPossession() {
     return (
-        this.possessionOwner ===
-        this.opponent
+        this.possessionOwner === this.opponent ||
+        this.possessionOwner === this.awayTeammate
     );
 }
 
@@ -431,9 +431,13 @@ this.possessionTimer = 0;
         this.teammateData.hasBall = false;
     }
 
-    if (this.opponentData) {
-        this.opponentData.hasBall = false;
-    }
+if (this.opponentData) {
+    this.opponentData.hasBall = false;
+}
+
+if (this.awayTeammateData) {
+    this.awayTeammateData.hasBall = false;
+}
 
     /*
      * Stop the carried-ball bounce animation.
@@ -478,7 +482,10 @@ this.possessionTimer = 0;
  * Allow Green to make one new disposal whenever
  * he gains possession.
  */
-if (newOwner === this.opponent) {
+if (
+    newOwner === this.opponent ||
+    newOwner === this.awayTeammate
+) {
     this.aiDisposalCompleted = false;
 }
 
@@ -490,11 +497,15 @@ if (newOwner === this.opponent) {
             newOwner === this.teammate;
     }
 
-    if (this.opponentData) {
-        this.opponentData.hasBall =
-            newOwner === this.opponent;
-    }
+if (this.opponentData) {
+    this.opponentData.hasBall =
+        newOwner === this.opponent;
+}
 
+if (this.awayTeammateData) {
+    this.awayTeammateData.hasBall =
+        newOwner === this.awayTeammate;
+}
     /*
      * A home player with possession must always become
      * the controlled player.
@@ -576,21 +587,24 @@ selectNearestHomeDefender() {
         return;
     }
 
-    const redDistance =
-        Phaser.Math.Distance.Between(
-            this.player.x,
-            this.player.y,
-            this.opponent.x,
-            this.opponent.y
-        );
+const awayBallCarrier =
+    this.possessionOwner;
 
-    const blueDistance =
-        Phaser.Math.Distance.Between(
-            this.teammate.x,
-            this.teammate.y,
-            this.opponent.x,
-            this.opponent.y
-        );
+const redDistance =
+    Phaser.Math.Distance.Between(
+        this.player.x,
+        this.player.y,
+        awayBallCarrier.x,
+        awayBallCarrier.y
+    );
+
+const blueDistance =
+    Phaser.Math.Distance.Between(
+        this.teammate.x,
+        this.teammate.y,
+        awayBallCarrier.x,
+        awayBallCarrier.y
+    );
 
     const nearestDefender =
         redDistance <= blueDistance
