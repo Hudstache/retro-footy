@@ -818,6 +818,25 @@ this.footballGroundBounceTimer = 0;
 this.scoreDetected = false;
 this.lastScoreResult = null;
 
+/*
+ * Clear contest and stoppage states left over from the
+ * previous passage of play.
+ */
+this.stoppageActive = false;
+this.stoppageType = null;
+this.stoppageRestartScheduled = false;
+this.trappedBallTimer = 0;
+
+this.isTackleActive = false;
+this.tackleTimer = 0;
+this.activeTackler = null;
+
+this.freeKickProtectedPlayer = null;
+this.freeKickProtectionTimer = 0;
+
+this.awayPressurePlayer = null;
+this.awayCoverPlayer = null;
+
 this.footballHeight = 0;
 this.currentMaximumFootballHeight = 0;
 
@@ -846,41 +865,26 @@ if (this.footballShadow) {
 }
 
 /*
- * Allow immediate possession after a centre restart.
+ * The centre football is loose and immediately
+ * available for collection.
  */
 this.footballPickupLockTimer = 0;
-this.footballCanBeMarked = true;
-this.footballHeight = 0;
-this.currentMaximumFootballHeight = 0;
+this.footballCanBeMarked = false;
 
-this.football.setVisible(true);
-
-if (this.airborneFootball) {
-    this.airborneFootball
-        .setVisible(false)
-        .setScale(1);
-}
-
-if (this.footballShadow) {
-    this.footballShadow
-        .setVisible(false)
-        .setScale(1)
-        .setAlpha(0.3);
-}
     }
 
-    /*
-     * Remove any movement left over from the previous
-     * passage of play.
-     */
-    this.player.movementVelocityX = 0;
-    this.player.movementVelocityY = 0;
+/*
+ * Remove movement left over from the previous
+ * passage of play for all four players.
+ */
+this.player.movementVelocityX = 0;
+this.player.movementVelocityY = 0;
 
-this.awayTeammate
-    .movementVelocityX = 0;
+this.teammate.movementVelocityX = 0;
+this.teammate.movementVelocityY = 0;
 
-this.awayTeammate
-    .movementVelocityY = 0;
+this.awayTeammate.movementVelocityX = 0;
+this.awayTeammate.movementVelocityY = 0;
 
     /*
      * Keep fatigue tracking aligned with the teleported
@@ -902,11 +906,17 @@ this.awayTeammate
         this.teammatePreviousFatigueY =
             this.teammate.y;
 
-        this.opponentPreviousFatigueX =
-            this.opponent.x;
+this.opponentPreviousFatigueX =
+    this.opponent.x;
 
-        this.opponentPreviousFatigueY =
-            this.opponent.y;
+this.opponentPreviousFatigueY =
+    this.opponent.y;
+
+this.awayTeammatePreviousFatigueX =
+    this.awayTeammate.x;
+
+this.awayTeammatePreviousFatigueY =
+    this.awayTeammate.y;
     }
 
     /*
@@ -3560,18 +3570,24 @@ updateFatigueDebugDisplay() {
             this.teammateFatigue
         );
 
-    const greenFatigue =
-        Math.round(
-            this.opponentFatigue
-        );
-
-    this.fatigueDebugText.setText(
-        [
-            `RED ENERGY:   ${redFatigue}`,
-            `BLUE ENERGY:  ${blueFatigue}`,
-            `GREEN ENERGY: ${greenFatigue}`
-        ]
+const darkGreenFatigue =
+    Math.round(
+        this.opponentFatigue
     );
+
+const lightGreenFatigue =
+    Math.round(
+        this.awayTeammateFatigue
+    );
+
+this.fatigueDebugText.setText(
+    [
+        `RED ENERGY:    ${redFatigue}`,
+        `BLUE ENERGY:   ${blueFatigue}`,
+        `DARK GREEN:    ${darkGreenFatigue}`,
+        `LIGHT GREEN:   ${lightGreenFatigue}`
+    ]
+);
 }
 
 updatePlayerFatigue(delta) {
