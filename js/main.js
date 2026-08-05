@@ -6713,32 +6713,78 @@ restartBoundaryThrowIn() {
             sidewaysDirection.y * 32
     );
 
-    this.opponent.setPosition(
-        restartX +
-            inwardDirection.x * 38 -
-            sidewaysDirection.x * 24,
+this.opponent.setPosition(
+    restartX +
+        inwardDirection.x * 38 -
+        sidewaysDirection.x * 24,
 
-        restartY +
-            inwardDirection.y * 38 -
-            sidewaysDirection.y * 24
-    );
+    restartY +
+        inwardDirection.y * 38 -
+        sidewaysDirection.y * 24
+);
 
-    this.keepObjectInsideField(
-        this.player
-    );
+/*
+ * Light Green begins slightly deeper and on the
+ * opposite side from Blue.
+ */
+this.awayTeammate.setPosition(
+    restartX +
+        inwardDirection.x * 58 +
+        sidewaysDirection.x * 32,
+
+    restartY +
+        inwardDirection.y * 58 +
+        sidewaysDirection.y * 32
+);
+
+this.keepObjectInsideField(
+    this.player
+);
 
     this.keepObjectInsideField(
         this.teammate
     );
 
-    this.keepObjectInsideField(
-        this.opponent
-    );
+this.keepObjectInsideField(
+    this.opponent
+);
 
-    /*
-     * Throw the football inward and slightly upward
-     * along the ground view.
-     */
+this.keepObjectInsideField(
+    this.awayTeammate
+);
+
+/*
+ * The restart teleports all four players, so update
+ * fatigue reference positions immediately.
+ */
+this.playerPreviousFatigueX =
+    this.player.x;
+
+this.playerPreviousFatigueY =
+    this.player.y;
+
+this.teammatePreviousFatigueX =
+    this.teammate.x;
+
+this.teammatePreviousFatigueY =
+    this.teammate.y;
+
+this.opponentPreviousFatigueX =
+    this.opponent.x;
+
+this.opponentPreviousFatigueY =
+    this.opponent.y;
+
+this.awayTeammatePreviousFatigueX =
+    this.awayTeammate.x;
+
+this.awayTeammatePreviousFatigueY =
+    this.awayTeammate.y;
+
+/*
+ * Throw the football inward and slightly upward
+ * along the ground view.
+ */
     this.football.x =
         restartX +
         inwardDirection.x * 8;
