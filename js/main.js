@@ -402,6 +402,13 @@ isHomePlayer(playerObject) {
     );
 }
 
+isAwayPlayer(playerObject) {
+    return (
+        playerObject === this.opponent ||
+        playerObject === this.awayTeammate
+    );
+}
+
 hasHomePossession() {
     return (
         this.possessionOwner !== null &&
@@ -7410,10 +7417,11 @@ if (
 }
 
 const markingCandidates = [
-        this.controlledPlayer,
-        this.supportPlayer,
-        this.opponent
-    ];
+    this.controlledPlayer,
+    this.supportPlayer,
+    this.opponent,
+    this.awayTeammate
+];
 
     const successfulCandidates = [];
 
@@ -7578,17 +7586,23 @@ console.log(
  * similar contest scores.
  */
 if (secondCandidate) {
-        const closestIsOpponent =
-            closestCandidate.player ===
-            this.opponent;
+/*
+ * Determine each candidate's team rather than checking
+ * only for the original darker Green player.
+ */
+const closestIsHome =
+    this.isHomePlayer(
+        closestCandidate.player
+    );
 
-        const secondIsOpponent =
-            secondCandidate.player ===
-            this.opponent;
+const secondIsHome =
+    this.isHomePlayer(
+        secondCandidate.player
+    );
 
-        const playersAreOpponents =
-            closestIsOpponent !==
-            secondIsOpponent;
+const playersAreOpponents =
+    closestIsHome !==
+    secondIsHome;
 
 /*
  * A close contest-score result produces a spoil.
@@ -7633,11 +7647,15 @@ this.footballPickupLockTimer =
             this.footballVelocityX *=
                 0.45;
 
-            const spoilDirection =
-                this.opponent.y <=
-                this.football.y
-                    ? 1
-                    : -1;
+/*
+ * Deflect the ball away from the player who finished
+ * second in the marking contest.
+ */
+const spoilDirection =
+    secondCandidate.player.y <=
+    this.football.y
+        ? 1
+        : -1;
 
             this.footballVelocityY =
                 spoilDirection * 180;
