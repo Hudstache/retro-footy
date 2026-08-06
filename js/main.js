@@ -1004,6 +1004,20 @@ this.maximumHandballHeight = 22;
  */
 this.currentMaximumFootballHeight = 0;
 
+/*
+ * Projected landing position for the current kick
+ * or handball.
+ */
+this.projectedLandingX = null;
+this.projectedLandingY = null;
+
+/*
+ * Store one committed landing-position player from
+ * each team for the current disposal.
+ */
+this.homeLandingContestPlayer = null;
+this.awayLandingContestPlayer = null;
+
     // Possession
 /*
  * The player object that currently owns the football.
@@ -2923,8 +2937,47 @@ if (this.airborneFootball) {
 this.footballVelocityX =
     direction.x * launchSpeed;
 
-    this.footballVelocityY =
-        direction.y * launchSpeed;
+this.footballVelocityY =
+    direction.y * launchSpeed;
+
+/*
+ * Predict how far the football will travel before its
+ * speed reaches the ground-bounce threshold.
+ *
+ * This matches the exponential-drag flight system.
+ */
+const projectedFlightDistance =
+    Math.max(
+        0,
+        (
+            launchSpeed -
+            flightStoppingSpeed
+        ) /
+        flightDragPerSecond
+    );
+
+const projectedLandingPoint =
+    this.getPointInsideField(
+        this.football.x +
+            direction.x *
+                projectedFlightDistance,
+
+        this.football.y +
+            direction.y *
+                projectedFlightDistance
+    );
+
+this.projectedLandingX =
+    projectedLandingPoint.x;
+
+this.projectedLandingY =
+    projectedLandingPoint.y;
+
+/*
+ * Select one player from each team to attack the
+ * projected landing point.
+ */
+this.assignLandingContestPlayers();
 
     /*
      * Kicks spin more quickly than handballs.
@@ -3256,16 +3309,38 @@ this.updateAutomaticBounce(
 );
 
 this.keepPlayerInsideField();
-this.updateTeammateSupport(delta);
 
 /*
- * Decide which Green player pressures and which one
- * covers before either defender moves.
+ * While a disposal is airborne, temporarily replace
+ * normal support and defensive positioning with
+ * projected landing-position movement.
  */
-this.updateAwayDefensiveAssignments();
+const landingContestIsActive =
+    this.footballInFlight &&
+    (
+        this.footballFlightType ===
+            "KICK" ||
+        this.footballFlightType ===
+            "HANDBALL"
+    );
 
-this.updateOpponentChase(delta);
-this.updateAwayTeammateSupport(delta);
+if (landingContestIsActive) {
+    this.updateAnticipatedLandingContest(
+        delta
+    );
+} else {
+    this.updateTeammateSupport(delta);
+
+    /*
+     * Decide which Green player pressures and which one
+     * covers before either defender moves.
+     */
+    this.updateAwayDefensiveAssignments();
+
+    this.updateOpponentChase(delta);
+    this.updateAwayTeammateSupport(delta);
+}
+
 this.updateTeamPressure();
 this.updateAIDisposal();
 this.updateFootballFlight(delta);
@@ -4266,6 +4341,190 @@ updateTeammateSupport(delta) {
 
     this.keepObjectInsideField(
         this.supportPlayer
+    );
+}
+
+assignLandingContestPlayers() {
+    if (
+        this.projectedLandingX === null ||
+        this.projectedLandingY === null
+    ) {
+        this.homeLandingContestPlayer =
+            null;
+
+        this.awayLandingContestPlayer =
+            null;
+
+        return;
+    }
+
+    /*
+     * The disposing player does not immediately chase
+     * their own kick or handball.
+     */
+    const getClosestEligiblePlayer =
+        (players) => {
+            let closestPlayer = null;
+            let closestDistance =
+                Number.MAX_VALUE;
+
+            for (const player of players) {
+                if (
+                    !player ||
+                    player ===
+                        this.lastDisposalPlayer
+                ) {
+                    continue;
+                }
+
+                const distanceToLanding =
+                    Phaser.Math.Distance.Between(
+                        player.x,
+                        player.y,
+                        this.projectedLandingX,
+                        this.projectedLandingY
+                    );
+
+                if (
+                    distanceToLanding <
+                    closestDistance
+                ) {
+                    closestDistance =
+                        distanceToLanding;
+
+                    closestPlayer =
+                        player;
+                }
+            }
+
+            return closestPlayer;
+        };
+
+    this.homeLandingContestPlayer =
+        getClosestEligiblePlayer([
+            this.player,
+            this.teammate
+        ]);
+
+    this.awayLandingContestPlayer =
+        getClosestEligiblePlayer([
+            this.opponent,
+            this.awayTeammate
+        ]);
+}
+
+updateAnticipatedLandingContest(delta) {
+    if (
+        !this.footballInFlight ||
+        this.projectedLandingX === null ||
+        this.projectedLandingY === null
+    ) {
+        return;
+    }
+
+    /*
+     * Ball-ups and boundary throw-ins retain their own
+     * restart movement rather than using kick-reading AI.
+     */
+    if (
+        this.footballFlightType !==
+            "KICK" &&
+        this.footballFlightType !==
+            "HANDBALL"
+    ) {
+        return;
+    }
+
+    const deltaSeconds =
+        delta / 1000;
+
+    const movePlayerToLanding =
+        (
+            player,
+            landingSideOffset
+        ) => {
+            if (!player) {
+                return;
+            }
+
+            /*
+             * Give the two teams slightly different final
+             * positions so they do not overlap perfectly.
+             */
+            const targetX =
+                this.projectedLandingX;
+
+            const targetY =
+                this.projectedLandingY +
+                landingSideOffset;
+
+            const directionToLanding =
+                new Phaser.Math.Vector2(
+                    targetX -
+                        player.x,
+
+                    targetY -
+                        player.y
+                );
+
+            const distanceToLanding =
+                directionToLanding.length();
+
+            const stoppingDistance = 8;
+
+            if (
+                distanceToLanding <=
+                stoppingDistance
+            ) {
+                this.keepObjectInsideField(
+                    player
+                );
+
+                return;
+            }
+
+            directionToLanding.normalize();
+
+            const landingMovementSpeed =
+                this.playerSpeed *
+                this.getFatigueSpeedMultiplier(
+                    player
+                );
+
+            const movementDistance =
+                Math.min(
+                    landingMovementSpeed *
+                        deltaSeconds,
+
+                    distanceToLanding -
+                        stoppingDistance
+                );
+
+            player.x +=
+                directionToLanding.x *
+                movementDistance;
+
+            player.y +=
+                directionToLanding.y *
+                movementDistance;
+
+            this.keepObjectInsideField(
+                player
+            );
+        };
+
+    /*
+     * Approach from slightly opposite sides while still
+     * remaining inside normal marking distance.
+     */
+    movePlayerToLanding(
+        this.homeLandingContestPlayer,
+        -7
+    );
+
+    movePlayerToLanding(
+        this.awayLandingContestPlayer,
+        7
     );
 }
 
@@ -5850,9 +6109,46 @@ this.footballVelocityX =
     direction.x *
     launchSpeed;
 
-    this.footballVelocityY =
-        direction.y *
-        launchSpeed;
+this.footballVelocityY =
+    direction.y *
+    launchSpeed;
+
+/*
+ * Predict Green's disposal landing position using the
+ * same drag calculation as the home disposal.
+ */
+const projectedFlightDistance =
+    Math.max(
+        0,
+        (
+            launchSpeed -
+            flightStoppingSpeed
+        ) /
+        flightDragPerSecond
+    );
+
+const projectedLandingPoint =
+    this.getPointInsideField(
+        this.football.x +
+            direction.x *
+                projectedFlightDistance,
+
+        this.football.y +
+            direction.y *
+                projectedFlightDistance
+    );
+
+this.projectedLandingX =
+    projectedLandingPoint.x;
+
+this.projectedLandingY =
+    projectedLandingPoint.y;
+
+/*
+ * Select one player from each team to attack the
+ * projected landing point.
+ */
+this.assignLandingContestPlayers();
 
     const minimumRotationSpeed =
         isKick ? 540 : 300;
@@ -8543,6 +8839,16 @@ this.footballInFlight = false;
 this.footballGroundState = "BOUNCING";
 
 /*
+ * The airborne landing-position contest has finished.
+ * Normal loose-ball movement can now resume.
+ */
+this.projectedLandingX = null;
+this.projectedLandingY = null;
+
+this.homeLandingContestPlayer = null;
+this.awayLandingContestPlayer = null;
+
+/*
  * The football has returned to ground level.
  */
 this.footballHeight = 0;
@@ -8918,9 +9224,20 @@ updateFootballRolling(deltaSeconds) {
 
 stopFootballFlight() {
 this.footballInFlight = false;
+this.footballInFlight = false;
 this.footballGroundState = "NONE";
 
 this.footballEstimatedFlightDuration = 0;
+
+/*
+ * Remove any landing-position assignment left over
+ * from a mark, score, possession change or restart.
+ */
+this.projectedLandingX = null;
+this.projectedLandingY = null;
+
+this.homeLandingContestPlayer = null;
+this.awayLandingContestPlayer = null;
 
 this.footballHeight = 0;
 this.currentMaximumFootballHeight = 0;
