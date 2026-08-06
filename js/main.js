@@ -849,6 +849,12 @@ this.activeTackler = null;
 this.freeKickProtectedPlayer = null;
 this.freeKickProtectionTimer = 0;
 
+/*
+ * Remove any player-on-the-mark state from the
+ * previous passage of play.
+ */
+this.releaseFreeKickPlayerOnMark();
+
 this.awayPressurePlayer = null;
 this.awayCoverPlayer = null;
 this.awayTackleCommitPlayer = null;
@@ -1272,6 +1278,44 @@ this.pushInBackChance = 0.03;
 this.currentTackleIsPushInBack = false;
 
 /*
+ * Free-kick restart protection.
+ */
+this.freeKickProtectedPlayer = null;
+this.freeKickProtectionTimer = 0;
+this.freeKickProtectionDuration = 900;
+
+/*
+ * Player-on-the-mark system.
+ */
+this.freeKickPlayerOnMark = null;
+
+this.freeKickMarkX = null;
+this.freeKickMarkY = null;
+
+/*
+ * The mark remains locked while the receiver prepares
+ * to dispose of the football.
+ */
+this.freeKickMarkWaitingForDisposal = false;
+
+/*
+ * Once the disposal begins, the player on the mark is
+ * released when the ball passes them.
+ */
+this.freeKickMarkDisposalActive = false;
+
+/*
+ * Fallback timer prevents the player on the mark from
+ * remaining restricted if an unusual disposal occurs.
+ */
+this.freeKickMarkReleaseTimer = 0;
+this.freeKickMarkReleaseDuration = 650;
+
+/*
+ * Direction from the free-kick receiver toward their
+ * attacking end.
+ */
+this.freeKickMarkAttackDirectionX = 0;/*
  * Free-kick restart protection.
  */
 this.freeKickProtectedPlayer = null;
@@ -2717,10 +2761,16 @@ if (this.isTackleActive) {
      * travelling football.
      */
 
-    /*
- * Disposing of the football ends any remaining
- * free-kick protection.
+/*
+ * Record whether this is the protected free-kick
+ * disposal before clearing the receiver's protection.
  */
+const isFreeKickDisposal =
+    this.freeKickProtectedPlayer ===
+    this.controlledPlayer &&
+    this.freeKickPlayerOnMark !==
+        null;
+
 if (
     this.freeKickProtectedPlayer ===
     this.controlledPlayer
@@ -3035,6 +3085,13 @@ this.footballVelocityX =
 
 this.footballVelocityY =
     direction.y * launchSpeed;
+
+/*
+ * Begin the protected player-on-the-mark disposal.
+ */
+if (isFreeKickDisposal) {
+    this.beginFreeKickMarkDisposal();
+}
 
 /*
  * Predict how far the football will travel before its
@@ -3447,6 +3504,15 @@ if (landingContestIsActive) {
 this.updateTeamPressure();
 this.updateAIDisposal();
 this.updateFootballFlight(delta);
+
+/*
+ * Check whether the free-kick disposal has passed the
+ * player on the mark before resolving marking contests.
+ */
+this.updateFreeKickPlayerOnMark(
+    delta
+);
+
 this.updateFootballMarking();
 this.updateFootballGroundPhysics(delta);
 
@@ -6502,9 +6568,16 @@ if (
     return;
 }
 
-        /*
- * An AI disposal ends Green's free-kick protection.
+/*
+ * Record whether this is Green's protected free-kick
+ * disposal before clearing protection.
  */
+const isFreeKickDisposal =
+    this.freeKickProtectedPlayer ===
+    disposingPlayer &&
+    this.freeKickPlayerOnMark !==
+        null;
+
 if (
     this.freeKickProtectedPlayer ===
     disposingPlayer
@@ -6708,6 +6781,13 @@ this.footballVelocityX =
 this.footballVelocityY =
     direction.y *
     launchSpeed;
+
+/*
+ * Begin Green's protected player-on-the-mark disposal.
+ */
+if (isFreeKickDisposal) {
+    this.beginFreeKickMarkDisposal();
+}
 
 /*
  * Predict Green's disposal landing position using the
@@ -9081,13 +9161,31 @@ const markingCandidates = [
 
     const successfulCandidates = [];
 
-    markingCandidates.forEach(
-        (candidatePlayer) => {
-            if (!candidatePlayer) {
-                return;
-            }
+markingCandidates.forEach(
+    (candidatePlayer) => {
+        if (!candidatePlayer) {
+            return;
+        }
 
-            const distanceToFootball =
+        /*
+         * The restricted player on the mark cannot mark
+         * or spoil the immediate free-kick disposal.
+         *
+         * Once the football passes them, the restriction
+         * is removed and they become eligible again.
+         */
+        if (
+            candidatePlayer ===
+                this.freeKickPlayerOnMark &&
+            (
+                this.freeKickMarkWaitingForDisposal ||
+                this.freeKickMarkDisposalActive
+            )
+        ) {
+            return;
+        }
+
+        const distanceToFootball =
                 Phaser.Math.Distance.Between(
                     candidatePlayer.x,
                     candidatePlayer.y,
@@ -10074,12 +10172,31 @@ if (this.hasAwayPossession()) {
     }
 }
 
-    if (!defender) {
-        this.isTackleActive = false;
-        this.tackleTimer = 0;
-        this.activeTackler = null;
-        return;
-    }
+if (!defender) {
+    this.isTackleActive = false;
+    this.tackleTimer = 0;
+    this.activeTackler = null;
+    return;
+}
+
+/*
+ * A restricted player on the mark cannot initiate a
+ * tackle before the free-kick disposal passes them.
+ */
+if (
+    defender ===
+        this.freeKickPlayerOnMark &&
+    (
+        this.freeKickMarkWaitingForDisposal ||
+        this.freeKickMarkDisposalActive
+    )
+) {
+    this.isTackleActive = false;
+    this.tackleTimer = 0;
+    this.activeTackler = null;
+
+    return;
+}
 
     /*
  * A fatigued defender cannot begin another tackle
@@ -10331,6 +10448,201 @@ return;
 
 }
 
+setupFreeKickPlayerOnMark(
+    freeKickReceiver,
+    offendingPlayer
+) {
+    if (
+        !freeKickReceiver ||
+        !offendingPlayer
+    ) {
+        return;
+    }
+
+    /*
+     * Home attacks toward the right.
+     * Away attacks toward the left.
+     */
+    const attackDirectionX =
+        this.isHomePlayer(
+            freeKickReceiver
+        )
+            ? 1
+            : -1;
+
+    const markDistance = 44;
+
+    const requestedMarkX =
+        freeKickReceiver.x +
+        attackDirectionX *
+            markDistance;
+
+    const requestedMarkY =
+        freeKickReceiver.y;
+
+    const correctedMarkPosition =
+        this.getPointInsideField(
+            requestedMarkX,
+            requestedMarkY
+        );
+
+    this.freeKickPlayerOnMark =
+        offendingPlayer;
+
+    this.freeKickMarkX =
+        correctedMarkPosition.x;
+
+    this.freeKickMarkY =
+        correctedMarkPosition.y;
+
+    this.freeKickMarkAttackDirectionX =
+        attackDirectionX;
+
+    this.freeKickMarkWaitingForDisposal =
+        true;
+
+    this.freeKickMarkDisposalActive =
+        false;
+
+    this.freeKickMarkReleaseTimer = 0;
+
+    /*
+     * Place the infringing player directly ahead of the
+     * player receiving the free kick.
+     */
+    offendingPlayer.setPosition(
+        this.freeKickMarkX,
+        this.freeKickMarkY
+    );
+
+    if (
+        offendingPlayer.movementVelocityX !==
+        undefined
+    ) {
+        offendingPlayer.movementVelocityX = 0;
+        offendingPlayer.movementVelocityY = 0;
+    }
+
+    this.keepObjectInsideField(
+        offendingPlayer
+    );
+}
+
+beginFreeKickMarkDisposal() {
+    if (
+        !this.freeKickPlayerOnMark ||
+        !this.freeKickMarkWaitingForDisposal
+    ) {
+        return;
+    }
+
+    this.freeKickMarkWaitingForDisposal =
+        false;
+
+    this.freeKickMarkDisposalActive =
+        true;
+
+    this.freeKickMarkReleaseTimer =
+        this.freeKickMarkReleaseDuration;
+}
+
+releaseFreeKickPlayerOnMark() {
+    this.freeKickPlayerOnMark = null;
+
+    this.freeKickMarkX = null;
+    this.freeKickMarkY = null;
+
+    this.freeKickMarkWaitingForDisposal =
+        false;
+
+    this.freeKickMarkDisposalActive =
+        false;
+
+    this.freeKickMarkReleaseTimer = 0;
+
+    this.freeKickMarkAttackDirectionX = 0;
+}
+
+updateFreeKickPlayerOnMark(delta) {
+    if (!this.freeKickPlayerOnMark) {
+        return;
+    }
+
+    /*
+     * Keep the infringing player fixed on the mark while
+     * the receiver prepares their disposal.
+     */
+    if (
+        this.freeKickMarkWaitingForDisposal
+    ) {
+        this.freeKickPlayerOnMark.setPosition(
+            this.freeKickMarkX,
+            this.freeKickMarkY
+        );
+
+        if (
+            this.freeKickPlayerOnMark
+                .movementVelocityX !==
+            undefined
+        ) {
+            this.freeKickPlayerOnMark
+                .movementVelocityX = 0;
+
+            this.freeKickPlayerOnMark
+                .movementVelocityY = 0;
+        }
+
+        return;
+    }
+
+    if (
+        !this.freeKickMarkDisposalActive
+    ) {
+        return;
+    }
+
+    this.freeKickMarkReleaseTimer =
+        Math.max(
+            0,
+            this.freeKickMarkReleaseTimer -
+                delta
+        );
+
+    /*
+     * Keep the player fixed until the football travels
+     * beyond the mark in the attacking direction.
+     */
+    this.freeKickPlayerOnMark.setPosition(
+        this.freeKickMarkX,
+        this.freeKickMarkY
+    );
+
+    const ballHasPassedTheMark =
+        this.freeKickMarkAttackDirectionX > 0
+            ? this.football.x >
+                this.freeKickMarkX
+            : this.football.x <
+                this.freeKickMarkX;
+
+    const disposalHasEnded =
+        !this.footballInFlight &&
+        this.footballGroundState ===
+            "NONE";
+
+    if (
+        ballHasPassedTheMark ||
+        this.freeKickMarkReleaseTimer <= 0 ||
+        disposalHasEnded ||
+        this.stoppageActive
+    ) {
+        this.releaseFreeKickPlayerOnMark();
+
+        console.log(
+            "Player on the mark returned to normal play."
+        );
+    }
+}
+
 startHighTackleFreeKick(
     freeKickReceiver,
     offendingTackler
@@ -10364,37 +10676,14 @@ startHighTackleFreeKick(
      * Move the tackler a short distance away so the
      * same contact does not immediately trigger again.
      */
-    const separationDirection =
-        new Phaser.Math.Vector2(
-            offendingTackler.x -
-                freeKickReceiver.x,
-
-            offendingTackler.y -
-                freeKickReceiver.y
-        );
-
-    if (
-        separationDirection.length() === 0
-    ) {
-        separationDirection.set(
-            1,
-            0
-        );
-    } else {
-        separationDirection.normalize();
-    }
-
-    offendingTackler.x =
-        freeKickReceiver.x +
-        separationDirection.x * 42;
-
-    offendingTackler.y =
-        freeKickReceiver.y +
-        separationDirection.y * 42;
-
-    this.keepObjectInsideField(
-        offendingTackler
-    );
+/*
+ * Place the infringing player directly ahead of the
+ * receiver as the player on the mark.
+ */
+this.setupFreeKickPlayerOnMark(
+    freeKickReceiver,
+    offendingTackler
+);
 
     /*
      * Keep possession with the infringed player.
@@ -10472,38 +10761,14 @@ startPushInBackFreeKick(
      * Move the offender away from the carrier so the
      * tackle cannot immediately restart.
      */
-    const separationDirection =
-        new Phaser.Math.Vector2(
-            offendingTackler.x -
-                freeKickReceiver.x,
-
-            offendingTackler.y -
-                freeKickReceiver.y
-        );
-
-    if (
-        separationDirection.length() ===
-        0
-    ) {
-        separationDirection.set(
-            1,
-            0
-        );
-    } else {
-        separationDirection.normalize();
-    }
-
-    offendingTackler.x =
-        freeKickReceiver.x +
-        separationDirection.x * 42;
-
-    offendingTackler.y =
-        freeKickReceiver.y +
-        separationDirection.y * 42;
-
-    this.keepObjectInsideField(
-        offendingTackler
-    );
+/*
+ * Place the infringing player directly ahead of the
+ * receiver as the player on the mark.
+ */
+this.setupFreeKickPlayerOnMark(
+    freeKickReceiver,
+    offendingTackler
+);
 
     /*
      * The infringed carrier keeps possession.
