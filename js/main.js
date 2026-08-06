@@ -432,7 +432,13 @@ clearPossession() {
 this.possessionOwner = null;
 this.possessionTimer = 0;
 
-    this.playerHasBall = false;
+/*
+ * A tackle commitment ends immediately when the
+ * football becomes unowned.
+ */
+this.awayTackleCommitPlayer = null;
+
+this.playerHasBall = false;
 
     if (this.teammateData) {
         this.teammateData.hasBall = false;
@@ -1152,6 +1158,29 @@ this.maximumMarkableFootballHeight = 18;
  * Tackling system.
  */
 this.tackleDistance = 26;
+
+/*
+ * The assigned pressure defender commits once close
+ * enough to make a realistic tackle attempt.
+ */
+this.tackleCommitDistance = 72;
+
+/*
+ * A committed defender only abandons the chase when
+ * the carrier creates substantial separation.
+ */
+this.tackleCommitBreakDistance = 105;
+
+/*
+ * Small speed increase for the final tackle approach.
+ */
+this.tackleCommitSpeedMultiplier = 1.18;
+
+/*
+ * Store the Green player currently committed to
+ * tackling the home ball carrier.
+ */
+this.awayTackleCommitPlayer = null;
 
 /*
  * Prevent tackle messages from repeating every frame.
@@ -4661,8 +4690,8 @@ updateAnticipatedLandingContest(delta) {
 
 updateAwayDefensiveAssignments() {
     /*
-     * Keep the current assignments outside home
-     * possession so other away-team behaviours can run.
+     * Clear defensive assignments whenever the home
+     * team no longer owns the football.
      */
     if (
         !this.hasHomePossession() ||
@@ -4672,12 +4701,49 @@ updateAwayDefensiveAssignments() {
     ) {
         this.awayPressurePlayer = null;
         this.awayCoverPlayer = null;
+        this.awayTackleCommitPlayer = null;
 
         return;
     }
 
     const ballCarrier =
         this.possessionOwner;
+
+    /*
+     * Keep an existing tackle commitment while the
+     * defender remains reasonably close to the carrier.
+     */
+    if (this.awayTackleCommitPlayer) {
+        const committedDistance =
+            Phaser.Math.Distance.Between(
+                this.awayTackleCommitPlayer.x,
+                this.awayTackleCommitPlayer.y,
+                ballCarrier.x,
+                ballCarrier.y
+            );
+
+        if (
+            committedDistance <=
+            this.tackleCommitBreakDistance
+        ) {
+            this.awayPressurePlayer =
+                this.awayTackleCommitPlayer;
+
+            this.awayCoverPlayer =
+                this.awayTackleCommitPlayer ===
+                    this.opponent
+                    ? this.awayTeammate
+                    : this.opponent;
+
+            return;
+        }
+
+        /*
+         * The defender was clearly beaten, so allow a
+         * new pressure assignment.
+         */
+        this.awayTackleCommitPlayer = null;
+    }
 
     const darkGreenDistance =
         Phaser.Math.Distance.Between(
@@ -4695,10 +4761,6 @@ updateAwayDefensiveAssignments() {
             ballCarrier.y
         );
 
-    /*
-     * The closest Green player pressures the carrier.
-     * The other Green player protects the receiver.
-     */
     if (
         darkGreenDistance <=
         lightGreenDistance
@@ -4714,6 +4776,24 @@ updateAwayDefensiveAssignments() {
 
         this.awayCoverPlayer =
             this.opponent;
+    }
+
+    const pressureDistance =
+        Math.min(
+            darkGreenDistance,
+            lightGreenDistance
+        );
+
+    /*
+     * Once the pressure defender gets close, lock that
+     * player into the tackle attempt.
+     */
+    if (
+        pressureDistance <=
+        this.tackleCommitDistance
+    ) {
+        this.awayTackleCommitPlayer =
+            this.awayPressurePlayer;
     }
 }
 
@@ -4820,33 +4900,40 @@ if (this.hasHomePossession()) {
     let targetX;
     let targetY;
 
-    if (
-        this.awayPressurePlayer ===
-        this.opponent
-    ) {
-        /*
-         * Dark Green applies direct pressure while
-         * remaining slightly goal-side.
-         */
-        this.opponentData.state =
-            "PRESSURE_CARRIER";
-
-        const goalSideOffset = 24;
-
-        const lateralOffset =
-            this.opponent.y <=
+if (
+    this.awayPressurePlayer ===
+    this.opponent
+) {
+    /*
+     * Dark Green now attacks the carrier directly
+     * instead of aiming for a point outside the
+     * tackling radius.
+     */
+    const darkGreenDistance =
+        Phaser.Math.Distance.Between(
+            this.opponent.x,
+            this.opponent.y,
+            ballCarrier.x,
             ballCarrier.y
-                ? -16
-                : 16;
+        );
 
-        targetX =
-            ballCarrier.x +
-            goalSideOffset;
+    const darkGreenIsCommitted =
+        this.awayTackleCommitPlayer ===
+            this.opponent ||
+        darkGreenDistance <=
+            this.tackleCommitDistance;
 
-        targetY =
-            ballCarrier.y +
-            lateralOffset;
-    } else {
+    this.opponentData.state =
+        darkGreenIsCommitted
+            ? "TACKLE_COMMIT"
+            : "PRESSURE_CARRIER";
+
+    targetX =
+        ballCarrier.x;
+
+    targetY =
+        ballCarrier.y;
+} else {
         /*
          * Dark Green protects the likely receiving
          * player and the passing lane.
@@ -4895,23 +4982,33 @@ if (this.hasHomePossession()) {
     const distanceToTarget =
         directionToTarget.length();
 
-    const stoppingDistance =
-        this.awayPressurePlayer ===
+const darkGreenIsPressuring =
+    this.awayPressurePlayer ===
+    this.opponent;
+
+const stoppingDistance =
+    darkGreenIsPressuring
+        ? 8
+        : 16;
+
+if (
+    distanceToTarget >
+    stoppingDistance
+) {
+    directionToTarget.normalize();
+
+    const commitmentMultiplier =
+        this.opponentData.state ===
+            "TACKLE_COMMIT"
+            ? this.tackleCommitSpeedMultiplier
+            : 1;
+
+    const movementSpeed =
+        this.opponentData.speed *
+        commitmentMultiplier *
+        this.getFatigueSpeedMultiplier(
             this.opponent
-            ? 10
-            : 16;
-
-    if (
-        distanceToTarget >
-        stoppingDistance
-    ) {
-        directionToTarget.normalize();
-
-        const movementSpeed =
-            this.opponentData.speed *
-            this.getFatigueSpeedMultiplier(
-                this.opponent
-            );
+        );
 
         const movementDistance =
             Math.min(
@@ -5733,33 +5830,39 @@ else if (this.hasHomePossession()) {
     let targetX;
     let targetY;
 
-    if (
-        this.awayPressurePlayer ===
-        this.awayTeammate
-    ) {
-        /*
-         * Light Green applies direct pressure while
-         * staying slightly goal-side.
-         */
-        this.awayTeammateData.state =
-            "PRESSURE_CARRIER";
-
-        const goalSideOffset = 24;
-
-        const lateralOffset =
-            this.awayTeammate.y <=
+if (
+    this.awayPressurePlayer ===
+    this.awayTeammate
+) {
+    /*
+     * Light Green attacks the carrier directly once
+     * assigned as the pressure defender.
+     */
+    const lightGreenDistance =
+        Phaser.Math.Distance.Between(
+            this.awayTeammate.x,
+            this.awayTeammate.y,
+            ballCarrier.x,
             ballCarrier.y
-                ? -16
-                : 16;
+        );
 
-        targetX =
-            ballCarrier.x +
-            goalSideOffset;
+    const lightGreenIsCommitted =
+        this.awayTackleCommitPlayer ===
+            this.awayTeammate ||
+        lightGreenDistance <=
+            this.tackleCommitDistance;
 
-        targetY =
-            ballCarrier.y +
-            lateralOffset;
-    } else {
+    this.awayTeammateData.state =
+        lightGreenIsCommitted
+            ? "TACKLE_COMMIT"
+            : "PRESSURE_CARRIER";
+
+    targetX =
+        ballCarrier.x;
+
+    targetY =
+        ballCarrier.y;
+} else {
         /*
          * Light Green protects the receiver and blocks
          * the most likely disposal lane.
@@ -5842,11 +5945,18 @@ else if (this.hasHomePossession()) {
 
     direction.normalize();
 
-    const movementSpeed =
-        this.awayTeammateData.speed *
-        this.getFatigueSpeedMultiplier(
-            this.awayTeammate
-        );
+const commitmentMultiplier =
+    this.awayTeammateData.state ===
+        "TACKLE_COMMIT"
+        ? this.tackleCommitSpeedMultiplier
+        : 1;
+
+const movementSpeed =
+    this.awayTeammateData.speed *
+    commitmentMultiplier *
+    this.getFatigueSpeedMultiplier(
+        this.awayTeammate
+    );
 
     const movement =
         Math.min(
