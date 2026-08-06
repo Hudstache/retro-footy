@@ -4121,76 +4121,197 @@ updateTeammateSupport(delta) {
                 112
             );
 
-        /*
-         * Choose the side offering the most separation
-         * from the closest Green defender.
-         */
-        const upperOptionY =
-            ballCarrier.y - 62;
+/*
+ * Create two advancing passing options above and below
+ * the ball carrier.
+ */
+const candidateX =
+    ballCarrier.x +
+    forwardLeadDistance;
 
-        const lowerOptionY =
-            ballCarrier.y + 62;
+const upperOptionY =
+    ballCarrier.y - 62;
 
-        const upperDarkGreenDistance =
-            Phaser.Math.Distance.Between(
-                ballCarrier.x +
-                    forwardLeadDistance,
-                upperOptionY,
-                this.opponent.x,
-                this.opponent.y
-            );
+const lowerOptionY =
+    ballCarrier.y + 62;
 
-        const upperLightGreenDistance =
-            Phaser.Math.Distance.Between(
-                ballCarrier.x +
-                    forwardLeadDistance,
-                upperOptionY,
-                this.awayTeammate.x,
-                this.awayTeammate.y
-            );
+/*
+ * Score each option by its distance from the nearest
+ * Green defender.
+ */
+const upperDarkGreenDistance =
+    Phaser.Math.Distance.Between(
+        candidateX,
+        upperOptionY,
+        this.opponent.x,
+        this.opponent.y
+    );
 
-        const lowerDarkGreenDistance =
-            Phaser.Math.Distance.Between(
-                ballCarrier.x +
-                    forwardLeadDistance,
-                lowerOptionY,
-                this.opponent.x,
-                this.opponent.y
-            );
+const upperLightGreenDistance =
+    Phaser.Math.Distance.Between(
+        candidateX,
+        upperOptionY,
+        this.awayTeammate.x,
+        this.awayTeammate.y
+    );
 
-        const lowerLightGreenDistance =
-            Phaser.Math.Distance.Between(
-                ballCarrier.x +
-                    forwardLeadDistance,
-                lowerOptionY,
-                this.awayTeammate.x,
-                this.awayTeammate.y
-            );
+const lowerDarkGreenDistance =
+    Phaser.Math.Distance.Between(
+        candidateX,
+        lowerOptionY,
+        this.opponent.x,
+        this.opponent.y
+    );
 
-        const upperSpaceScore =
-            Math.min(
-                upperDarkGreenDistance,
-                upperLightGreenDistance
-            );
+const lowerLightGreenDistance =
+    Phaser.Math.Distance.Between(
+        candidateX,
+        lowerOptionY,
+        this.awayTeammate.x,
+        this.awayTeammate.y
+    );
 
-        const lowerSpaceScore =
-            Math.min(
-                lowerDarkGreenDistance,
-                lowerLightGreenDistance
-            );
+const upperSpaceScore =
+    Math.min(
+        upperDarkGreenDistance,
+        upperLightGreenDistance
+    );
 
-        const selectedTargetY =
-            upperSpaceScore >=
-            lowerSpaceScore
-                ? upperOptionY
-                : lowerOptionY;
+const lowerSpaceScore =
+    Math.min(
+        lowerDarkGreenDistance,
+        lowerLightGreenDistance
+    );
 
-        let targetX =
-            ballCarrier.x +
-            forwardLeadDistance;
+let targetX =
+    candidateX;
 
-        let targetY =
-            selectedTargetY;
+let targetY =
+    upperSpaceScore >=
+        lowerSpaceScore
+        ? upperOptionY
+        : lowerOptionY;
+
+/*
+ * Identify the defender currently closest to the
+ * support player's intended position.
+ */
+const darkGreenTargetDistance =
+    Phaser.Math.Distance.Between(
+        targetX,
+        targetY,
+        this.opponent.x,
+        this.opponent.y
+    );
+
+const lightGreenTargetDistance =
+    Phaser.Math.Distance.Between(
+        targetX,
+        targetY,
+        this.awayTeammate.x,
+        this.awayTeammate.y
+    );
+
+const nearestSupportDefender =
+    darkGreenTargetDistance <=
+    lightGreenTargetDistance
+        ? this.opponent
+        : this.awayTeammate;
+
+/*
+ * Push the target away from the nearest defender when
+ * they are close enough to close the passing lane.
+ */
+const separationDirection =
+    new Phaser.Math.Vector2(
+        targetX -
+            nearestSupportDefender.x,
+
+        targetY -
+            nearestSupportDefender.y
+    );
+
+const targetDefenderDistance =
+    separationDirection.length();
+
+const desiredDefenderSeparation = 58;
+
+if (
+    targetDefenderDistance <
+    desiredDefenderSeparation
+) {
+    if (separationDirection.length() === 0) {
+        separationDirection.set(
+            0,
+            targetY <= ballCarrier.y
+                ? -1
+                : 1
+        );
+    } else {
+        separationDirection.normalize();
+    }
+
+    const separationNeeded =
+        desiredDefenderSeparation -
+        targetDefenderDistance;
+
+    targetX +=
+        separationDirection.x *
+        separationNeeded;
+
+    targetY +=
+        separationDirection.y *
+        separationNeeded;
+}
+
+/*
+ * Keep the support player within a viable passing range
+ * rather than allowing them to run too close or too far.
+ */
+const directionFromCarrier =
+    new Phaser.Math.Vector2(
+        targetX - ballCarrier.x,
+        targetY - ballCarrier.y
+    );
+
+let targetDistanceFromCarrier =
+    directionFromCarrier.length();
+
+const minimumSupportDistance = 60;
+const maximumSupportDistance = 110;
+
+if (targetDistanceFromCarrier === 0) {
+    directionFromCarrier.set(
+        1,
+        targetY <= ballCarrier.y
+            ? -0.5
+            : 0.5
+    );
+
+    directionFromCarrier.normalize();
+
+    targetDistanceFromCarrier =
+        minimumSupportDistance;
+} else {
+    directionFromCarrier.normalize();
+}
+
+const clampedSupportDistance =
+    Phaser.Math.Clamp(
+        targetDistanceFromCarrier,
+        minimumSupportDistance,
+        maximumSupportDistance
+    );
+
+targetX =
+    ballCarrier.x +
+    directionFromCarrier.x *
+        clampedSupportDistance;
+
+targetY =
+    ballCarrier.y +
+    directionFromCarrier.y *
+        clampedSupportDistance;
 
         /*
          * Near goal, move into a scoring lane rather
@@ -4205,17 +4326,27 @@ updateTeammateSupport(delta) {
                 maximumAttackingX
             );
 
-        /*
-         * Do not let the support player fall behind the
-         * ball carrier during normal attacking play.
-         */
-        targetX =
-            Math.max(
-                targetX,
-                ballCarrier.x + 34
-            );
+/*
+ * Separation must not cause the support player to fall
+ * behind the ball carrier.
+ */
+targetX =
+    Math.max(
+        targetX,
+        ballCarrier.x + 34
+    );
 
-        const correctedTarget =
+/*
+ * Do not let defender avoidance push the player beyond
+ * the home scoring line.
+ */
+targetX =
+    Math.min(
+        targetX,
+        maximumAttackingX
+    );
+
+const correctedTarget =
             this.getPointInsideField(
                 targetX,
                 targetY
@@ -5324,54 +5455,255 @@ updateAwayTeammateSupport(delta) {
     const deltaSeconds =
         delta / 1000;
 
+/*
+ * When Green has possession, light Green creates an
+ * advancing option toward the left-side scoring end.
+ */
+if (this.hasAwayPossession()) {
+
+    this.awayTeammateData.state =
+        "SEPARATION_LEAD";
+
+    const ballCarrier =
+        this.possessionOwner;
+
     /*
-     * When Green has possession, the lighter Green
-     * player creates a forward leading option.
+     * If light Green owns the football, normal support
+     * movement must not move the ball carrier as though
+     * they were the receiver.
      */
-    if (this.hasAwayPossession()) {
+    if (
+        ballCarrier ===
+        this.awayTeammate
+    ) {
+        this.awayTeammateData.targetX =
+            this.awayTeammate.x;
 
-        this.awayTeammateData.state =
-            "LEAD";
+        this.awayTeammateData.targetY =
+            this.awayTeammate.y;
+    } else {
+        const awayScoringEndX =
+            this.field.leftGoalLineX;
 
-        const ballCarrier =
-            this.possessionOwner;
-
-        const forwardLeadDistance = 90;
-        const sidewaysDistance = 55;
-
-        const movementDirection =
-            new Phaser.Math.Vector2(
-                -1,
-                0
-            );
-
-        const sidewaysDirection =
-            new Phaser.Math.Vector2(
+        const distanceToScoringEnd =
+            Math.max(
                 0,
-                1
+                ballCarrier.x -
+                    awayScoringEndX
             );
 
-        const leadSide =
-            this.awayTeammate.y <
-            ballCarrier.y
-                ? -1
-                : 1;
+        const forwardLeadDistance =
+            Phaser.Math.Clamp(
+                distanceToScoringEnd * 0.28,
+                58,
+                110
+            );
+
+        const candidateX =
+            ballCarrier.x -
+            forwardLeadDistance;
+
+        const upperOptionY =
+            ballCarrier.y - 62;
+
+        const lowerOptionY =
+            ballCarrier.y + 62;
+
+        /*
+         * Score both lanes by their distance from Red
+         * and Blue.
+         */
+        const upperRedDistance =
+            Phaser.Math.Distance.Between(
+                candidateX,
+                upperOptionY,
+                this.player.x,
+                this.player.y
+            );
+
+        const upperBlueDistance =
+            Phaser.Math.Distance.Between(
+                candidateX,
+                upperOptionY,
+                this.teammate.x,
+                this.teammate.y
+            );
+
+        const lowerRedDistance =
+            Phaser.Math.Distance.Between(
+                candidateX,
+                lowerOptionY,
+                this.player.x,
+                this.player.y
+            );
+
+        const lowerBlueDistance =
+            Phaser.Math.Distance.Between(
+                candidateX,
+                lowerOptionY,
+                this.teammate.x,
+                this.teammate.y
+            );
+
+        const upperSpaceScore =
+            Math.min(
+                upperRedDistance,
+                upperBlueDistance
+            );
+
+        const lowerSpaceScore =
+            Math.min(
+                lowerRedDistance,
+                lowerBlueDistance
+            );
 
         let targetX =
-            ballCarrier.x +
-            movementDirection.x *
-                forwardLeadDistance +
-            sidewaysDirection.x *
-                sidewaysDistance *
-                leadSide;
+            candidateX;
 
         let targetY =
+            upperSpaceScore >=
+                lowerSpaceScore
+                ? upperOptionY
+                : lowerOptionY;
+
+        /*
+         * Identify the nearest home defender to the
+         * intended lead position.
+         */
+        const redTargetDistance =
+            Phaser.Math.Distance.Between(
+                targetX,
+                targetY,
+                this.player.x,
+                this.player.y
+            );
+
+        const blueTargetDistance =
+            Phaser.Math.Distance.Between(
+                targetX,
+                targetY,
+                this.teammate.x,
+                this.teammate.y
+            );
+
+        const nearestSupportDefender =
+            redTargetDistance <=
+            blueTargetDistance
+                ? this.player
+                : this.teammate;
+
+        const separationDirection =
+            new Phaser.Math.Vector2(
+                targetX -
+                    nearestSupportDefender.x,
+
+                targetY -
+                    nearestSupportDefender.y
+            );
+
+        const targetDefenderDistance =
+            separationDirection.length();
+
+        const desiredDefenderSeparation =
+            58;
+
+        if (
+            targetDefenderDistance <
+            desiredDefenderSeparation
+        ) {
+            if (
+                separationDirection.length() ===
+                0
+            ) {
+                separationDirection.set(
+                    0,
+                    targetY <= ballCarrier.y
+                        ? -1
+                        : 1
+                );
+            } else {
+                separationDirection.normalize();
+            }
+
+            const separationNeeded =
+                desiredDefenderSeparation -
+                targetDefenderDistance;
+
+            targetX +=
+                separationDirection.x *
+                separationNeeded;
+
+            targetY +=
+                separationDirection.y *
+                separationNeeded;
+        }
+
+        /*
+         * Keep the lead within useful disposal range.
+         */
+        const directionFromCarrier =
+            new Phaser.Math.Vector2(
+                targetX - ballCarrier.x,
+                targetY - ballCarrier.y
+            );
+
+        let targetDistanceFromCarrier =
+            directionFromCarrier.length();
+
+        const minimumSupportDistance = 60;
+        const maximumSupportDistance = 110;
+
+        if (
+            targetDistanceFromCarrier ===
+            0
+        ) {
+            directionFromCarrier.set(
+                -1,
+                targetY <= ballCarrier.y
+                    ? -0.5
+                    : 0.5
+            );
+
+            directionFromCarrier.normalize();
+
+            targetDistanceFromCarrier =
+                minimumSupportDistance;
+        } else {
+            directionFromCarrier.normalize();
+        }
+
+        const clampedSupportDistance =
+            Phaser.Math.Clamp(
+                targetDistanceFromCarrier,
+                minimumSupportDistance,
+                maximumSupportDistance
+            );
+
+        targetX =
+            ballCarrier.x +
+            directionFromCarrier.x *
+                clampedSupportDistance;
+
+        targetY =
             ballCarrier.y +
-            movementDirection.y *
-                forwardLeadDistance +
-            sidewaysDirection.y *
-                sidewaysDistance *
-                leadSide;
+            directionFromCarrier.y *
+                clampedSupportDistance;
+
+        /*
+         * Ensure the lead continues toward the away
+         * scoring end rather than drifting behind play.
+         */
+        targetX =
+            Math.min(
+                targetX,
+                ballCarrier.x - 34
+            );
+
+        targetX =
+            Math.max(
+                targetX,
+                awayScoringEndX + 34
+            );
 
         const correctedTarget =
             this.getPointInsideField(
@@ -5379,15 +5711,13 @@ updateAwayTeammateSupport(delta) {
                 targetY
             );
 
-        targetX = correctedTarget.x;
-        targetY = correctedTarget.y;
-
         this.awayTeammateData.targetX =
-            targetX;
+            correctedTarget.x;
 
         this.awayTeammateData.targetY =
-            targetY;
+            correctedTarget.y;
     }
+}
 
 /*
  * During home possession, follow the shared pressure
