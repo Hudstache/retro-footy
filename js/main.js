@@ -1150,6 +1150,23 @@ this.footballGroundBounceTimer = 0;
 this.footballGroundBounceDuration = 260;
 
 /*
+ * Oval-football bounce variation.
+ *
+ * Most bounces remain fairly straight, while a smaller
+ * number produce a sharper sideways deviation.
+ */
+this.normalBounceDirectionChange = 16;
+this.largeBounceDirectionChange = 38;
+this.largeBounceChance = 0.18;
+
+/*
+ * Each impact retains a slightly different amount of
+ * the football's incoming speed.
+ */
+this.minimumBounceSpeedRetention = 0.56;
+this.maximumBounceSpeedRetention = 0.70;
+
+/*
  * Stores the football's scale when each bounce begins.
  */
 this.footballBounceHeight = 0;
@@ -9452,12 +9469,18 @@ this.football.setScale(
     this.footballBaseScaleY
 );
 
-    this.footballBounceCount = 0;
-    this.footballGroundBounceTimer = 0;
+this.footballBounceCount = 0;
+this.footballGroundBounceTimer = 0;
 
-    /*
-     * Preserve the disposal direction.
-     */
+/*
+ * Begin every new disposal with the standard first
+ * bounce duration.
+ */
+this.footballGroundBounceDuration = 260;
+
+/*
+ * Preserve the disposal direction.
+ */
     const movementDirection =
         new Phaser.Math.Vector2(
             this.footballVelocityX,
@@ -9508,18 +9531,41 @@ if (
     firstBounceSpeed = 60;
 }
 
-    this.footballVelocityX =
-        movementDirection.x *
-        firstBounceSpeed;
+/*
+ * The first impact can also produce an imperfect oval
+ * bounce rather than always continuing perfectly
+ * straight.
+ */
+const firstBounceMaximumChange =
+    this.footballFlightType ===
+        "KICK"
+        ? 14
+        : 8;
 
-    this.footballVelocityY =
-        movementDirection.y *
-        firstBounceSpeed;
+const firstBounceDirectionChange =
+    Phaser.Math.Between(
+        -firstBounceMaximumChange,
+        firstBounceMaximumChange
+    );
 
-    /*
-     * Kicks produce a larger first bounce than
-     * handballs.
-     */
+movementDirection.rotate(
+    Phaser.Math.DegToRad(
+        firstBounceDirectionChange
+    )
+);
+
+this.footballVelocityX =
+    movementDirection.x *
+    firstBounceSpeed;
+
+this.footballVelocityY =
+    movementDirection.y *
+    firstBounceSpeed;
+
+/*
+ * Kicks produce a larger first bounce than
+ * handballs.
+ */
 if (
     this.footballFlightType ===
     "KICK"
@@ -9685,23 +9731,43 @@ completeFootballBounce() {
         return;
     }
 
-    /*
-     * An Australian football does not always bounce
-     * perfectly straight.
-     *
-     * Apply a small random direction change after each
-     * ground impact.
-     */
-    const maximumDirectionChange =
-        this.footballFlightType === "KICK"
-            ? 18
-            : 10;
+/*
+ * Most impacts produce a modest deviation, but the
+ * oval shape occasionally causes a much sharper bounce.
+ */
+const largeBounceOccurred =
+    Phaser.Math.FloatBetween(
+        0,
+        1
+    ) < this.largeBounceChance;
 
-    const directionChangeDegrees =
-        Phaser.Math.Between(
-            -maximumDirectionChange,
-            maximumDirectionChange
-        );
+let maximumDirectionChange;
+
+if (largeBounceOccurred) {
+    maximumDirectionChange =
+        this.largeBounceDirectionChange;
+} else if (
+    this.footballFlightType ===
+    "KICK"
+) {
+    maximumDirectionChange =
+        this.normalBounceDirectionChange;
+} else {
+    maximumDirectionChange = 10;
+}
+
+/*
+ * Later bounces become slightly less predictable as
+ * the football tumbles and loses its original flight.
+ */
+maximumDirectionChange +=
+    this.footballBounceCount * 3;
+
+const directionChangeDegrees =
+    Phaser.Math.Between(
+        -maximumDirectionChange,
+        maximumDirectionChange
+    );
 
     const movementDirection =
         new Phaser.Math.Vector2(
@@ -9715,14 +9781,29 @@ completeFootballBounce() {
         )
     );
 
-    /*
-     * Each bounce loses a portion of its speed.
-     */
-    const retainedSpeed =
-        currentSpeed *
-        0.64;
+/*
+ * Each impact loses speed, but the exact amount varies
+ * depending on how cleanly the oval football lands.
+ */
+let speedRetention =
+    Phaser.Math.FloatBetween(
+        this.minimumBounceSpeedRetention,
+        this.maximumBounceSpeedRetention
+    );
 
-    movementDirection.normalize();
+/*
+ * A sharp sideways bounce loses slightly more forward
+ * momentum than a clean bounce.
+ */
+if (largeBounceOccurred) {
+    speedRetention *= 0.90;
+}
+
+const retainedSpeed =
+    currentSpeed *
+    speedRetention;
+
+movementDirection.normalize();
 
     this.footballVelocityX =
         movementDirection.x *
@@ -9738,12 +9819,22 @@ completeFootballBounce() {
     this.footballBounceHeight *=
         0.58;
 
-    this.footballGroundBounceDuration =
-        Math.max(
-            150,
-            this.footballGroundBounceDuration *
-                0.82
-        );
+/*
+ * Later bounces become quicker and lower, with a small
+ * amount of timing variation between impacts.
+ */
+const bounceDurationVariation =
+    Phaser.Math.FloatBetween(
+        0.76,
+        0.86
+    );
+
+this.footballGroundBounceDuration =
+    Math.max(
+        145,
+        this.footballGroundBounceDuration *
+            bounceDurationVariation
+    );
 }
 
 startFootballRolling() {
