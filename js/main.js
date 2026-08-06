@@ -8424,11 +8424,18 @@ const previousFootballY =
         this.footballVelocityY *
         deltaSeconds;
 
-        this.updateScoreDetection(
+this.updateScoreDetection(
     previousFootballX
 );
 
-if (this.scoreDetected) {
+/*
+ * Stop processing this flight when it has produced
+ * either a score or a scoring-end boundary stoppage.
+ */
+if (
+    this.scoreDetected ||
+    this.stoppageActive
+) {
     return;
 }
 
@@ -8786,27 +8793,61 @@ updateScoreDetection(
             centreY
         );
 
-    let scoreResult =
-        "MISS";
+let scoreResult = null;
 
-    if (
-        distanceFromGoalCentre <
-        goalPostOffset
-    ) {
-        scoreResult =
-            "GOAL";
-    } else if (
-        distanceFromGoalCentre <
-        behindPostOffset
-    ) {
-        scoreResult =
-            "BEHIND";
-    }
+if (
+    distanceFromGoalCentre <
+    goalPostOffset
+) {
+    scoreResult =
+        "GOAL";
+} else if (
+    distanceFromGoalCentre <
+    behindPostOffset
+) {
+    scoreResult =
+        "BEHIND";
+}
 
-    this.scoreDetected = true;
+/*
+ * A kick crossing the scoring line outside the behind
+ * posts is out of bounds rather than a score.
+ */
+if (scoreResult === null) {
+    const boundaryX =
+        crossedRightGoalLine
+            ? rightGoalLineX
+            : leftGoalLineX;
 
-    this.lastScoreResult =
-        scoreResult;
+    /*
+     * Pull the restart point just inside the oval so the
+     * existing boundary throw-in formation remains valid.
+     */
+    const boundaryPoint =
+        this.getPointInsideField(
+            boundaryX,
+            this.football.y,
+            0,
+            0
+        );
+
+    this.startStoppage(
+        "BOUNDARY",
+        boundaryPoint.x,
+        boundaryPoint.y
+    );
+
+    console.log(
+        "Scoring shot crossed outside the behind posts."
+    );
+
+    return;
+}
+
+this.scoreDetected = true;
+
+this.lastScoreResult =
+    scoreResult;
 
     this.lastScoringTeam =
         crossedRightGoalLine
@@ -8859,15 +8900,7 @@ updateScoreDetection(
         console.log(
             `${this.lastScoringTeam} BEHIND.`
         );
-    } else {
-        this.passTypeText.setText(
-            "MISSED"
-        );
-
-        console.log(
-            "The shot missed the scoring posts."
-        );
-    }
+}
 
     /*
      * Keep the result visible before returning play to
