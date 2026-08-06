@@ -433,10 +433,19 @@ this.possessionOwner = null;
 this.possessionTimer = 0;
 
 /*
- * A tackle commitment ends immediately when the
+ * Tackle and support commitments end when the
  * football becomes unowned.
  */
 this.awayTackleCommitPlayer = null;
+
+this.homeSupportDecisionTimer = 0;
+this.awaySupportDecisionTimer = 0;
+
+this.homeSupportCommittedTargetX = null;
+this.homeSupportCommittedTargetY = null;
+
+this.awaySupportCommittedTargetX = null;
+this.awaySupportCommittedTargetY = null;
 
 this.playerHasBall = false;
 
@@ -842,6 +851,21 @@ this.freeKickProtectionTimer = 0;
 
 this.awayPressurePlayer = null;
 this.awayCoverPlayer = null;
+this.awayTackleCommitPlayer = null;
+
+/*
+ * Remove AI decisions from the previous passage.
+ */
+this.landingReactionTimer = 0;
+
+this.homeSupportDecisionTimer = 0;
+this.awaySupportDecisionTimer = 0;
+
+this.homeSupportCommittedTargetX = null;
+this.homeSupportCommittedTargetY = null;
+
+this.awaySupportCommittedTargetX = null;
+this.awaySupportCommittedTargetY = null;
 
 this.footballHeight = 0;
 this.currentMaximumFootballHeight = 0;
@@ -1443,6 +1467,32 @@ this.stoppageRestartScheduled = false;
 this.aiMinimumDecisionTime = 650;
 this.aiMaximumHoldTime = 1500;
 this.aiDisposalCompleted = false;
+
+/*
+ * AI players take a brief moment to recognise a new
+ * airborne disposal before moving toward its landing
+ * position.
+ */
+this.landingReactionDuration = 150;
+this.landingReactionTimer = 0;
+
+/*
+ * Support players remain committed to a chosen lead
+ * for this long before selecting another lane.
+ */
+this.supportDecisionDuration = 400;
+
+this.homeSupportDecisionTimer = 0;
+this.awaySupportDecisionTimer = 0;
+
+/*
+ * Store the current committed support targets.
+ */
+this.homeSupportCommittedTargetX = null;
+this.homeSupportCommittedTargetY = null;
+
+this.awaySupportCommittedTargetX = null;
+this.awaySupportCommittedTargetY = null;
 
 /*
  * Team support and pressure settings.
@@ -3081,6 +3131,13 @@ this.updatePlayerFatigue(delta);
 this.updateFatigueDebugDisplay();
 
 /*
+ * Reduce AI awareness and commitment timers.
+ */
+this.updateDecisionCommitmentTimers(
+    delta
+);
+
+/*
  * Freeze gameplay during quarter breaks and after
  * the final siren.
  */
@@ -3400,6 +3457,29 @@ if (!this.stoppageActive) {
  */
 this.updateCameraTarget();
 this.updateControlledPlayerIndicator();
+}
+
+updateDecisionCommitmentTimers(delta) {
+    this.landingReactionTimer =
+        Math.max(
+            0,
+            this.landingReactionTimer -
+                delta
+        );
+
+    this.homeSupportDecisionTimer =
+        Math.max(
+            0,
+            this.homeSupportDecisionTimer -
+                delta
+        );
+
+    this.awaySupportDecisionTimer =
+        Math.max(
+            0,
+            this.awaySupportDecisionTimer -
+                delta
+        );
 }
 
 updateQuarterTimer(delta) {
@@ -4376,25 +4456,46 @@ targetX =
     );
 
 const correctedTarget =
-            this.getPointInsideField(
-                targetX,
-                targetY
-            );
+    this.getPointInsideField(
+        targetX,
+        targetY
+    );
 
-        targetX =
-            correctedTarget.x;
+/*
+ * Only select a new attacking target once the previous
+ * support decision has expired.
+ */
+if (
+    this.homeSupportDecisionTimer <= 0 ||
+    this.homeSupportCommittedTargetX ===
+        null ||
+    this.homeSupportCommittedTargetY ===
+        null
+) {
+    this.homeSupportCommittedTargetX =
+        correctedTarget.x;
 
-        targetY =
-            correctedTarget.y;
+    this.homeSupportCommittedTargetY =
+        correctedTarget.y;
 
-        this.teammateData.state =
-            "ATTACKING_OPTION";
+    this.homeSupportDecisionTimer =
+        this.supportDecisionDuration;
+}
 
-        this.teammateData.targetX =
-            targetX;
+targetX =
+    this.homeSupportCommittedTargetX;
 
-        this.teammateData.targetY =
-            targetY;
+targetY =
+    this.homeSupportCommittedTargetY;
+
+this.teammateData.state =
+    "ATTACKING_OPTION";
+
+this.teammateData.targetX =
+    targetX;
+
+this.teammateData.targetY =
+    targetY;
 
         const directionToTarget =
             new Phaser.Math.Vector2(
@@ -4566,11 +4667,18 @@ assignLandingContestPlayers() {
             this.teammate
         ]);
 
-    this.awayLandingContestPlayer =
-        getClosestEligiblePlayer([
-            this.opponent,
-            this.awayTeammate
-        ]);
+this.awayLandingContestPlayer =
+    getClosestEligiblePlayer([
+        this.opponent,
+        this.awayTeammate
+    ]);
+
+/*
+ * Players recognise the disposal quickly, but not on
+ * the exact frame it leaves the boot or hand.
+ */
+this.landingReactionTimer =
+    this.landingReactionDuration;
 }
 
 updateAnticipatedLandingContest(delta) {
@@ -4578,6 +4686,16 @@ updateAnticipatedLandingContest(delta) {
         !this.footballInFlight ||
         this.projectedLandingX === null ||
         this.projectedLandingY === null
+    ) {
+        return;
+    }
+
+    /*
+     * Give AI players a short awareness delay before
+     * they begin reading the disposal.
+     */
+    if (
+        this.landingReactionTimer > 0
     ) {
         return;
     }
@@ -5893,17 +6011,38 @@ if (
             );
     }
 
-    const correctedTarget =
-        this.getPointInsideField(
-            targetX,
-            targetY
-        );
+const correctedTarget =
+    this.getPointInsideField(
+        targetX,
+        targetY
+    );
 
-    this.awayTeammateData.targetX =
+/*
+ * Keep light Green committed to this lead briefly
+ * instead of changing lanes every frame.
+ */
+if (
+    this.awaySupportDecisionTimer <= 0 ||
+    this.awaySupportCommittedTargetX ===
+        null ||
+    this.awaySupportCommittedTargetY ===
+        null
+) {
+    this.awaySupportCommittedTargetX =
         correctedTarget.x;
 
-    this.awayTeammateData.targetY =
+    this.awaySupportCommittedTargetY =
         correctedTarget.y;
+
+    this.awaySupportDecisionTimer =
+        this.supportDecisionDuration;
+}
+
+this.awayTeammateData.targetX =
+    this.awaySupportCommittedTargetX;
+
+this.awayTeammateData.targetY =
+    this.awaySupportCommittedTargetY;
 }
 
     /*
