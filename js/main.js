@@ -8904,16 +8904,28 @@ if (
         );
 }
 
-const goalLineCrossingY =
+const logicalGoalLineCrossingY =
     Phaser.Math.Linear(
         previousFootballY,
         this.football.y,
         crossingProgress
     );
 
+/*
+ * The airborne football is displayed above its logical
+ * ground-plane position.
+ *
+ * Scoring should therefore use the visible football
+ * position so a kick that appears to pass through the
+ * posts receives the matching result.
+ */
+const visibleGoalLineCrossingY =
+    logicalGoalLineCrossingY -
+    this.footballHeight;
+
 const distanceFromGoalCentre =
     Math.abs(
-        goalLineCrossingY -
+        visibleGoalLineCrossingY -
         centreY
     );
 
@@ -8950,7 +8962,7 @@ if (scoreResult === null) {
 const boundaryPoint =
     this.getPointInsideField(
         boundaryX,
-        goalLineCrossingY,
+        visibleGoalLineCrossingY,
         0,
         0
     );
@@ -8995,7 +9007,7 @@ this.football.x =
     scoringLineX;
 
 this.football.y =
-    goalLineCrossingY;
+    logicalGoalLineCrossingY;
 
 this.stopFootballFlight();
 
