@@ -8945,6 +8945,34 @@ const distanceFromGoalCentre =
     );
 
 /*
+ * Treat the football as having some width when it
+ * crosses the scoring line.
+ *
+ * The posts themselves are 6 pixels thick and the
+ * football is approximately 9 pixels tall.
+ */
+const goalPostHitTolerance = 8;
+const behindPostHitTolerance = 8;
+
+/*
+ * Measure the centre of the football against the
+ * centre of each post.
+ */
+const hitGoalPost =
+    Math.abs(
+        distanceFromGoalCentre -
+        goalPostOffset
+    ) <= goalPostHitTolerance;
+
+const hitBehindPost =
+    Math.abs(
+        distanceFromGoalCentre -
+        behindPostOffset
+    ) <= behindPostHitTolerance;
+
+let scoreResult = null;
+
+/*
  * Temporary scoring diagnostic.
  */
 console.log(
@@ -8986,25 +9014,45 @@ console.log(
 
 let scoreResult = null;
 
-if (
+/*
+ * Deterministic scoring priority:
+ *
+ * 1. Goal-post contact = behind
+ * 2. Between goal posts = goal
+ * 3. Behind-post contact = out of bounds
+ * 4. Between goal and behind posts = behind
+ * 5. Outside behind posts = out of bounds
+ */
+if (hitGoalPost) {
+    scoreResult =
+        "HIT_POST";
+} else if (
     distanceFromGoalCentre <
-    goalPostOffset
+    goalPostOffset -
+        goalPostHitTolerance
 ) {
     scoreResult =
         "GOAL";
+} else if (hitBehindPost) {
+    scoreResult =
+        "BEHIND_POST";
 } else if (
     distanceFromGoalCentre <
-    behindPostOffset
+    behindPostOffset -
+        behindPostHitTolerance
 ) {
     scoreResult =
         "BEHIND";
 }
 
 /*
- * A kick crossing the scoring line outside the behind
- * posts is out of bounds rather than a score.
+ * A ball striking a behind post, or crossing outside
+ * the behind posts, is out of bounds.
  */
-if (scoreResult === null) {
+if (
+    scoreResult === null ||
+    scoreResult === "BEHIND_POST"
+) {
     const boundaryX =
         crossedRightGoalLine
             ? rightGoalLineX
@@ -9037,23 +9085,30 @@ const boundaryPoint =
 
 this.scoreDetected = true;
 
+/*
+ * A goal-post hit is recorded statistically as a
+ * behind, while retaining a separate display result.
+ */
 this.lastScoreResult =
-    scoreResult;
+    scoreResult === "HIT_POST"
+        ? "BEHIND"
+        : scoreResult;
 
-    this.lastScoringTeam =
-        crossedRightGoalLine
-            ? "HOME"
-            : "AWAY";
+this.lastScoringTeam =
+    crossedRightGoalLine
+        ? "HOME"
+        : "AWAY";
 
     /*
      * Only goals and behinds change the scoreboard.
      */
-    if (
-        scoreResult === "GOAL" ||
-        scoreResult === "BEHIND"
-    ) {
-        this.updateScoreboard();
-    }
+if (
+    scoreResult === "GOAL" ||
+    scoreResult === "BEHIND" ||
+    scoreResult === "HIT_POST"
+) {
+    this.updateScoreboard();
+}
 
     /*
      * Stop the football on the goal line it crossed.
@@ -9066,32 +9121,42 @@ this.football.y =
 
 this.stopFootballFlight();
 
-    if (
-        scoreResult === "GOAL"
-    ) {
-        this.passTypeText.setText(
-            this.lastScoringTeam ===
-                "HOME"
-                ? "HOME GOAL!"
-                : "AWAY GOAL!"
-        );
+if (
+    scoreResult === "GOAL"
+) {
+    this.passTypeText.setText(
+        this.lastScoringTeam ===
+            "HOME"
+            ? "HOME GOAL!"
+            : "AWAY GOAL!"
+    );
 
-        console.log(
-            `${this.lastScoringTeam} GOAL!`
-        );
-    } else if (
-        scoreResult === "BEHIND"
-    ) {
-        this.passTypeText.setText(
-            this.lastScoringTeam ===
-                "HOME"
-                ? "HOME BEHIND"
-                : "AWAY BEHIND"
-        );
+    console.log(
+        `${this.lastScoringTeam} GOAL!`
+    );
+} else if (
+    scoreResult === "HIT_POST"
+) {
+    this.passTypeText.setText(
+        "HIT THE POST!"
+    );
 
-        console.log(
-            `${this.lastScoringTeam} BEHIND.`
-        );
+    console.log(
+        `${this.lastScoringTeam} hit the goal post. Behind awarded.`
+    );
+} else if (
+    scoreResult === "BEHIND"
+) {
+    this.passTypeText.setText(
+        this.lastScoringTeam ===
+            "HOME"
+            ? "HOME BEHIND"
+            : "AWAY BEHIND"
+    );
+
+    console.log(
+        `${this.lastScoringTeam} BEHIND.`
+    );
 }
 
     /*
@@ -9116,9 +9181,13 @@ this.time.delayedCall(
             );
         }
 
+        /*
+         * Both an ordinary behind and a goal-post hit
+         * restart with a defending-team kick-in.
+         */
         if (
-            scoredResult ===
-            "BEHIND"
+            scoredResult === "BEHIND" ||
+            scoredResult === "HIT_POST"
         ) {
             this.restartAfterBehind();
         } else {
