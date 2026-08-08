@@ -8904,28 +8904,25 @@ if (
         );
 }
 
-const logicalGoalLineCrossingY =
+/*
+ * Calculate the football's exact field position when it
+ * crossed the scoring line.
+ *
+ * footballHeight is deliberately NOT used here.
+ * Height only changes how the airborne graphic is drawn;
+ * it must not change the football's north/south position
+ * on the oval.
+ */
+const goalLineCrossingY =
     Phaser.Math.Linear(
         previousFootballY,
         this.football.y,
         crossingProgress
     );
 
-/*
- * The airborne football is displayed above its logical
- * ground-plane position.
- *
- * Scoring should therefore use the visible football
- * position so a kick that appears to pass through the
- * posts receives the matching result.
- */
-const visibleGoalLineCrossingY =
-    logicalGoalLineCrossingY -
-    this.footballHeight;
-
 const distanceFromGoalCentre =
     Math.abs(
-        visibleGoalLineCrossingY -
+        goalLineCrossingY -
         centreY
     );
 
@@ -8962,7 +8959,7 @@ if (scoreResult === null) {
 const boundaryPoint =
     this.getPointInsideField(
         boundaryX,
-        visibleGoalLineCrossingY,
+        goalLineCrossingY,
         0,
         0
     );
@@ -9007,7 +9004,7 @@ this.football.x =
     scoringLineX;
 
 this.football.y =
-    logicalGoalLineCrossingY;
+    goalLineCrossingY;
 
 this.stopFootballFlight();
 
