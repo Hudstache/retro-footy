@@ -9031,23 +9031,302 @@ this.stopFootballFlight();
      * Keep the result visible before returning play to
      * the shared centre formation.
      */
-    this.time.delayedCall(
-        1500,
-        () => {
-            if (
-                this.passTypeText
-            ) {
-                this.passTypeText.setText(
-                    ""
-                );
-            }
+/*
+ * Goals return to the centre.
+ * Behinds restart with a defending-team kick-in.
+ */
+const scoredResult =
+    scoreResult;
 
+this.time.delayedCall(
+    1500,
+    () => {
+        if (
+            this.passTypeText
+        ) {
+            this.passTypeText.setText(
+                ""
+            );
+        }
+
+        if (
+            scoredResult ===
+            "BEHIND"
+        ) {
+            this.restartAfterBehind();
+        } else {
             this.restartAfterScore();
         }
+    }
+);
+}
+
+restartAfterBehind() {
+    /*
+     * Do not restart an old behind after the quarter
+     * has ended.
+     */
+    if (
+        this.quarterBreakActive ||
+        this.matchFinished
+    ) {
+        this.scoreDetected = false;
+        this.lastScoreResult = null;
+        this.lastScoringTeam = null;
+
+        return;
+    }
+
+    /*
+     * HOME behind:
+     * Away defends the right scoring end.
+     *
+     * AWAY behind:
+     * Home defends the left scoring end.
+     */
+    const homeScoredBehind =
+        this.lastScoringTeam === "HOME";
+
+    const defendingTeam =
+        homeScoredBehind
+            ? "AWAY"
+            : "HOME";
+
+    /*
+     * Position the kick-in just inside the field from
+     * the defending goal line.
+     */
+    const kickInX =
+        homeScoredBehind
+            ? this.field.rightGoalLineX - 28
+            : this.field.leftGoalLineX + 28;
+
+    const kickInY =
+        this.field.centreY;
+
+    /*
+     * Choose the player closest to the kick-in location
+     * from the defending team.
+     */
+    let kickInPlayer;
+    let supportPlayer;
+    let nearestOpponent;
+    let secondOpponent;
+
+    if (defendingTeam === "HOME") {
+        const redDistance =
+            Phaser.Math.Distance.Between(
+                this.player.x,
+                this.player.y,
+                kickInX,
+                kickInY
+            );
+
+        const blueDistance =
+            Phaser.Math.Distance.Between(
+                this.teammate.x,
+                this.teammate.y,
+                kickInX,
+                kickInY
+            );
+
+        if (redDistance <= blueDistance) {
+            kickInPlayer = this.player;
+            supportPlayer = this.teammate;
+        } else {
+            kickInPlayer = this.teammate;
+            supportPlayer = this.player;
+        }
+
+        nearestOpponent = this.opponent;
+        secondOpponent = this.awayTeammate;
+    } else {
+        const darkGreenDistance =
+            Phaser.Math.Distance.Between(
+                this.opponent.x,
+                this.opponent.y,
+                kickInX,
+                kickInY
+            );
+
+        const lightGreenDistance =
+            Phaser.Math.Distance.Between(
+                this.awayTeammate.x,
+                this.awayTeammate.y,
+                kickInX,
+                kickInY
+            );
+
+        if (
+            darkGreenDistance <=
+            lightGreenDistance
+        ) {
+            kickInPlayer = this.opponent;
+            supportPlayer = this.awayTeammate;
+        } else {
+            kickInPlayer = this.awayTeammate;
+            supportPlayer = this.opponent;
+        }
+
+        nearestOpponent = this.player;
+        secondOpponent = this.teammate;
+    }
+
+    this.clearPossession();
+    this.stopFootballFlight();
+
+    /*
+     * Direction from the defending goal toward the
+     * centre of the ground.
+     */
+    const fieldDirectionX =
+        homeScoredBehind
+            ? -1
+            : 1;
+
+    /*
+     * Give the kicker room at the goal square.
+     */
+    kickInPlayer.setPosition(
+        kickInX,
+        kickInY
+    );
+
+    /*
+     * The support player begins farther downfield as a
+     * viable first kick-in option.
+     */
+    supportPlayer.setPosition(
+        kickInX +
+            fieldDirectionX * 92,
+        kickInY - 58
+    );
+
+    /*
+     * The opposition begins outside the immediate
+     * kick-in area.
+     */
+    nearestOpponent.setPosition(
+        kickInX +
+            fieldDirectionX * 70,
+        kickInY + 24
+    );
+
+    secondOpponent.setPosition(
+        kickInX +
+            fieldDirectionX * 118,
+        kickInY - 52
+    );
+
+    this.keepObjectInsideField(
+        kickInPlayer
+    );
+
+    this.keepObjectInsideField(
+        supportPlayer
+    );
+
+    this.keepObjectInsideField(
+        nearestOpponent
+    );
+
+    this.keepObjectInsideField(
+        secondOpponent
+    );
+
+    /*
+     * Remove movement carried over from the scoring play.
+     */
+    [
+        this.player,
+        this.teammate,
+        this.opponent,
+        this.awayTeammate
+    ].forEach(
+        (playerObject) => {
+            playerObject.movementVelocityX = 0;
+            playerObject.movementVelocityY = 0;
+        }
+    );
+
+    /*
+     * Clear scoring and stoppage restrictions from the
+     * previous passage.
+     */
+    this.scoreDetected = false;
+    this.lastScoreResult = null;
+    this.lastScoringTeam = null;
+
+    this.stoppageActive = false;
+    this.stoppageType = null;
+    this.stoppageRestartScheduled = false;
+
+    this.isTackleActive = false;
+    this.tackleTimer = 0;
+    this.activeTackler = null;
+
+    this.releaseFreeKickPlayerOnMark();
+
+    /*
+     * Give the defending player possession for the
+     * kick-in.
+     */
+    this.setPossessionOwner(
+        kickInPlayer
+    );
+
+    /*
+     * Briefly protect the kicker so the restart cannot
+     * immediately become a tackle.
+     */
+    this.freeKickProtectedPlayer =
+        kickInPlayer;
+
+    this.freeKickProtectionTimer =
+        this.freeKickProtectionDuration;
+
+    /*
+     * Make the football immediately usable.
+     */
+    this.footballPickupLockTimer = 0;
+
+    /*
+     * Keep fatigue tracking aligned with the teleported
+     * player positions.
+     */
+    this.playerPreviousFatigueX =
+        this.player.x;
+
+    this.playerPreviousFatigueY =
+        this.player.y;
+
+    this.teammatePreviousFatigueX =
+        this.teammate.x;
+
+    this.teammatePreviousFatigueY =
+        this.teammate.y;
+
+    this.opponentPreviousFatigueX =
+        this.opponent.x;
+
+    this.opponentPreviousFatigueY =
+        this.opponent.y;
+
+    this.awayTeammatePreviousFatigueX =
+        this.awayTeammate.x;
+
+    this.awayTeammatePreviousFatigueY =
+        this.awayTeammate.y;
+
+    console.log(
+        defendingTeam === "HOME"
+            ? "Home kick-in after away behind."
+            : "Away kick-in after home behind."
     );
 }
 
 restartAfterScore() {
+
     /*
      * Do not restart an old scoring passage after a
      * quarter has ended.
