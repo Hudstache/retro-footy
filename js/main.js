@@ -8505,7 +8505,8 @@ const previousFootballY =
         deltaSeconds;
 
 this.updateScoreDetection(
-    previousFootballX
+    previousFootballX,
+    previousFootballY
 );
 
 /*
@@ -8786,7 +8787,8 @@ updateScoreboard() {
 }
 
 updateScoreDetection(
-    previousFootballX
+    previousFootballX,
+    previousFootballY
 ) {
     if (this.scoreDetected) {
         return;
@@ -8867,11 +8869,53 @@ updateScoreDetection(
         return;
     }
 
-    const distanceFromGoalCentre =
-        Math.abs(
-            this.football.y -
-            centreY
+/*
+ * Calculate the exact point where the football crossed
+ * the goal line.
+ *
+ * Using the football's final position for this frame can
+ * incorrectly classify diagonal kicks as out of bounds.
+ */
+const scoringLineX =
+    crossedRightGoalLine
+        ? rightGoalLineX
+        : leftGoalLineX;
+
+const horizontalMovementThisFrame =
+    this.football.x -
+    previousFootballX;
+
+let crossingProgress = 1;
+
+if (
+    Math.abs(
+        horizontalMovementThisFrame
+    ) > 0.0001
+) {
+    crossingProgress =
+        Phaser.Math.Clamp(
+            (
+                scoringLineX -
+                previousFootballX
+            ) /
+            horizontalMovementThisFrame,
+            0,
+            1
         );
+}
+
+const goalLineCrossingY =
+    Phaser.Math.Linear(
+        previousFootballY,
+        this.football.y,
+        crossingProgress
+    );
+
+const distanceFromGoalCentre =
+    Math.abs(
+        goalLineCrossingY -
+        centreY
+    );
 
 let scoreResult = null;
 
@@ -8903,13 +8947,13 @@ if (scoreResult === null) {
      * Pull the restart point just inside the oval so the
      * existing boundary throw-in formation remains valid.
      */
-    const boundaryPoint =
-        this.getPointInsideField(
-            boundaryX,
-            this.football.y,
-            0,
-            0
-        );
+const boundaryPoint =
+    this.getPointInsideField(
+        boundaryX,
+        goalLineCrossingY,
+        0,
+        0
+    );
 
     this.startStoppage(
         "BOUNDARY",
@@ -8947,12 +8991,13 @@ this.lastScoreResult =
     /*
      * Stop the football on the goal line it crossed.
      */
-    this.football.x =
-        crossedRightGoalLine
-            ? rightGoalLineX
-            : leftGoalLineX;
+this.football.x =
+    scoringLineX;
 
-    this.stopFootballFlight();
+this.football.y =
+    goalLineCrossingY;
+
+this.stopFootballFlight();
 
     if (
         scoreResult === "GOAL"
