@@ -9196,8 +9196,6 @@ console.log(
     }
 );
 
-let scoreResult = null;
-
 /*
  * Deterministic scoring priority:
  *
