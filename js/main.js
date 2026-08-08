@@ -833,6 +833,14 @@ this.footballGroundBounceTimer = 0;
 this.scoreDetected = false;
 this.lastScoreResult = null;
 
+this.scoreAnimationActive = false;
+
+if (this.airborneFootball) {
+    this.airborneFootball
+        .setVisible(false)
+        .setScale(1);
+}
+
 /*
  * Clear contest and stoppage states left over from the
  * previous passage of play.
@@ -1373,6 +1381,17 @@ this.footballCanBeMarked = false;
 this.scoreDetected = false;
 this.lastScoreResult = null;
 this.lastScoringTeam = null;
+
+/*
+ * Score-flight presentation.
+ *
+ * When a score is detected, briefly preserve the
+ * airborne football at the point where it crossed
+ * the scoring line instead of snapping it to the
+ * logical ground-plane football.
+ */
+this.scoreAnimationActive = false;
+this.scoreAnimationDuration = 420;
 
 /*
  * Match scoring.
@@ -9113,6 +9132,25 @@ if (
     /*
      * Stop the football on the goal line it crossed.
      */
+/*
+ * Capture the visible airborne football before
+ * stopFootballFlight() resets its height and scale.
+ */
+const scoreFootballHeight =
+    this.footballHeight;
+
+const scoreFootballAngle =
+    this.football.angle;
+
+const scoreFootballScale =
+    this.airborneFootball
+        ? this.airborneFootball.scaleX
+        : 1;
+
+/*
+ * Store the logical football at the exact scoring-line
+ * crossing position.
+ */
 this.football.x =
     scoringLineX;
 
@@ -9120,6 +9158,18 @@ this.football.y =
     goalLineCrossingY;
 
 this.stopFootballFlight();
+
+/*
+ * Restore only the airborne visual long enough to show
+ * the ball completing the scoring action cleanly.
+ */
+this.startScoreFlightAnimation(
+    scoringLineX,
+    goalLineCrossingY,
+    scoreFootballHeight,
+    scoreFootballAngle,
+    scoreFootballScale
+);
 
 if (
     scoreResult === "GOAL"
@@ -9197,7 +9247,74 @@ this.time.delayedCall(
 );
 }
 
+startScoreFlightAnimation(
+    scoringLineX,
+    scoringCrossingY,
+    scoreFootballHeight,
+    scoreFootballAngle,
+    scoreFootballScale
+) {
+    this.scoreAnimationActive = true;
+
+    /*
+     * stopFootballFlight() restores the normal logical
+     * football, so hide it again during the scoring
+     * presentation.
+     */
+    this.football.setVisible(false);
+
+    if (this.footballShadow) {
+        this.footballShadow.setVisible(false);
+    }
+
+    if (this.airborneFootball) {
+        /*
+         * Restore the football to the exact visible
+         * position it occupied when the score occurred.
+         */
+        this.airborneFootball
+            .setPosition(
+                scoringLineX,
+                scoringCrossingY -
+                    scoreFootballHeight
+            )
+            .setAngle(
+                scoreFootballAngle
+            )
+            .setScale(
+                scoreFootballScale
+            )
+            .setStrokeStyle(
+                2,
+                0xffffff
+            )
+            .setVisible(true);
+    }
+
+    /*
+     * Hold the scored football briefly, then remove it.
+     * The normal goal/behind restart will create the
+     * football in its correct new position later.
+     */
+    this.time.delayedCall(
+        this.scoreAnimationDuration,
+        () => {
+            if (this.airborneFootball) {
+                this.airborneFootball
+                    .setVisible(false)
+                    .setScale(1);
+            }
+
+            this.football.setVisible(false);
+
+            this.scoreAnimationActive =
+                false;
+        }
+    );
+}
+
 restartAfterBehind() {
+
     /*
      * Do not restart an old behind after the quarter
      * has ended.
@@ -9410,6 +9527,23 @@ restartAfterBehind() {
     this.setPossessionOwner(
         kickInPlayer
     );
+
+    /*
+ * The score animation has finished. Allow the normal
+ * possession system to display the football with the
+ * kick-in player.
+ */
+this.scoreAnimationActive = false;
+
+if (this.airborneFootball) {
+    this.airborneFootball
+        .setVisible(false)
+        .setScale(1);
+}
+
+this.football.setVisible(true);
+
+this.attachFootballToPossessionOwner();
 
     /*
      * Briefly protect the kicker so the restart cannot
