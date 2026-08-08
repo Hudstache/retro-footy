@@ -6411,31 +6411,49 @@ updateAIDisposal() {
         return;
     }
 
-    const distanceToControlledDefender =
-        Phaser.Math.Distance.Between(
-            this.opponent.x,
-            this.opponent.y,
-            this.controlledPlayer.x,
-            this.controlledPlayer.y
-        );
+/*
+ * Either Green player may currently possess the
+ * football, so all AI disposal decisions must use the
+ * actual ball carrier rather than always using dark
+ * Green.
+ */
+const awayBallCarrier =
+    this.possessionOwner;
 
-    const distanceToSupportDefender =
-        Phaser.Math.Distance.Between(
-            this.opponent.x,
-            this.opponent.y,
-            this.supportPlayer.x,
-            this.supportPlayer.y
-        );
+if (
+    !awayBallCarrier ||
+    !this.isAwayPlayer(
+        awayBallCarrier
+    )
+) {
+    return;
+}
 
-    const nearestDefenderDistance =
-        Math.min(
-            distanceToControlledDefender,
-            distanceToSupportDefender
-        );
+const distanceToControlledDefender =
+    Phaser.Math.Distance.Between(
+        awayBallCarrier.x,
+        awayBallCarrier.y,
+        this.controlledPlayer.x,
+        this.controlledPlayer.y
+    );
 
-    const distanceToAwayGoal =
-        this.opponent.x -
-        this.field.leftGoalLineX;
+const distanceToSupportDefender =
+    Phaser.Math.Distance.Between(
+        awayBallCarrier.x,
+        awayBallCarrier.y,
+        this.supportPlayer.x,
+        this.supportPlayer.y
+    );
+
+const nearestDefenderDistance =
+    Math.min(
+        distanceToControlledDefender,
+        distanceToSupportDefender
+    );
+
+const distanceToAwayGoal =
+    awayBallCarrier.x -
+    this.field.leftGoalLineX;
 
     /*
      * Green disposes earlier when under pressure.
@@ -6508,20 +6526,20 @@ const underModeratePressure =
     const goalCorridorInfluence =
         isKick ? 0.55 : 0.25;
 
-    const targetY =
-        Phaser.Math.Linear(
-            this.opponent.y,
-            this.field.centreY,
-            goalCorridorInfluence
-        ) +
-        Phaser.Math.Between(
-            isKick ? -38 : -22,
-            isKick ? 38 : 22
-        );
+const targetY =
+    Phaser.Math.Linear(
+        awayBallCarrier.y,
+        this.field.centreY,
+        goalCorridorInfluence
+    ) +
+    Phaser.Math.Between(
+        isKick ? -38 : -22,
+        isKick ? 38 : 22
+    );
 
-    const rawTargetX =
-        this.opponent.x -
-        targetDistance;
+const rawTargetX =
+    awayBallCarrier.x -
+    targetDistance;
 
     const correctedTarget =
         this.getPointInsideField(
@@ -8925,6 +8943,46 @@ const distanceFromGoalCentre =
         goalLineCrossingY -
         centreY
     );
+
+/*
+ * Temporary scoring diagnostic.
+ */
+console.log(
+    "SCORING CROSSING",
+    {
+        team:
+            crossedRightGoalLine
+                ? "HOME"
+                : "AWAY",
+
+        crossingY:
+            goalLineCrossingY,
+
+        centreY:
+            centreY,
+
+        distanceFromCentre:
+            distanceFromGoalCentre,
+
+        goalPostOffset:
+            goalPostOffset,
+
+        behindPostOffset:
+            behindPostOffset,
+
+        disposingPlayer:
+            this.lastDisposalPlayer ===
+                this.opponent
+                ? "DARK_GREEN"
+                : this.lastDisposalPlayer ===
+                    this.awayTeammate
+                    ? "LIGHT_GREEN"
+                    : this.lastDisposalPlayer ===
+                        this.player
+                        ? "RED"
+                        : "BLUE"
+    }
+);
 
 let scoreResult = null;
 
