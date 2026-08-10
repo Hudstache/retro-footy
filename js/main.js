@@ -9157,46 +9157,6 @@ const hitBehindPost =
 let scoreResult = null;
 
 /*
- * Temporary scoring diagnostic.
- */
-console.log(
-    "SCORING CROSSING",
-    {
-        team:
-            crossedRightGoalLine
-                ? "HOME"
-                : "AWAY",
-
-        crossingY:
-            goalLineCrossingY,
-
-        centreY:
-            centreY,
-
-        distanceFromCentre:
-            distanceFromGoalCentre,
-
-        goalPostOffset:
-            goalPostOffset,
-
-        behindPostOffset:
-            behindPostOffset,
-
-        disposingPlayer:
-            this.lastDisposalPlayer ===
-                this.opponent
-                ? "DARK_GREEN"
-                : this.lastDisposalPlayer ===
-                    this.awayTeammate
-                    ? "LIGHT_GREEN"
-                    : this.lastDisposalPlayer ===
-                        this.player
-                        ? "RED"
-                        : "BLUE"
-    }
-);
-
-/*
  * Deterministic scoring priority:
  *
  * 1. Goal-post contact = behind
@@ -9252,17 +9212,26 @@ const boundaryPoint =
         0
     );
 
-    this.startStoppage(
-        "BOUNDARY",
-        boundaryPoint.x,
-        boundaryPoint.y
-    );
+this.startStoppage(
+    "BOUNDARY",
+    boundaryPoint.x,
+    boundaryPoint.y
+);
 
-    console.log(
-        "Scoring shot crossed outside the behind posts."
+/*
+ * Make the scoring-end result explicit.
+ */
+if (this.passTypeText) {
+    this.passTypeText.setText(
+        "OUT OF BOUNDS"
     );
+}
 
-    return;
+console.log(
+    "OUT OF BOUNDS - scoring shot crossed outside the behind posts."
+);
+
+return;
 }
 
 this.scoreDetected = true;
