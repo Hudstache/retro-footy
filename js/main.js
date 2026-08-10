@@ -5123,83 +5123,96 @@ updateOpponentChase(delta) {
     const deltaSeconds =
         delta / 1000;
 
-    /*
-     * When the opponent has possession, they carry the
-     * football toward the left side of the ground.
-     */
-    if (this.hasAwayPossession()) {
-        this.opponentData.state =
-            "CARRY";
-
-        const carryTargetX =
-            this.opponent.x - 140;
-
-        /*
-         * Move slightly toward the centre corridor while
-         * advancing.
-         */
-        const carryTargetY =
-            Phaser.Math.Linear(
-                this.opponent.y,
-                this.field.centreY,
-                0.28
-            );
-
-        const correctedTarget =
-            this.getPointInsideField(
-                carryTargetX,
-                carryTargetY
-            );
-
-        const carryDirection =
-            new Phaser.Math.Vector2(
-                correctedTarget.x -
-                    this.opponent.x,
-
-                correctedTarget.y -
-                    this.opponent.y
-            );
-
-        if (carryDirection.length() > 0) {
-            carryDirection.normalize();
-        }
-
 /*
- * Away-team ball carriers use the same calibrated
- * carrying speed as home players.
+ * When Away has possession, move whichever Green player
+ * actually owns the football.
  */
-/*
- * Combined home pressure slows Green while carrying.
- */
-const opponentFatigueMultiplier =
-    this.getFatigueSpeedMultiplier(
-        this.opponent
-    );
+if (this.hasAwayPossession()) {
+    const awayBallCarrier =
+        this.possessionOwner;
 
-const carrySpeed =
-    this.ballCarrierSpeed *
-    (
-        this.opponentMovementMultiplier ??
-        1
-    ) *
-    opponentFatigueMultiplier;
-
-        this.opponent.x +=
-            carryDirection.x *
-            carrySpeed *
-            deltaSeconds;
-
-        this.opponent.y +=
-            carryDirection.y *
-            carrySpeed *
-            deltaSeconds;
-
-        this.keepObjectInsideField(
-            this.opponent
-        );
-
+    if (
+        !awayBallCarrier ||
+        !this.isAwayPlayer(
+            awayBallCarrier
+        )
+    ) {
         return;
     }
+
+    const carrierData =
+        awayBallCarrier ===
+            this.opponent
+            ? this.opponentData
+            : this.awayTeammateData;
+
+    carrierData.state =
+        "CARRY";
+
+    /*
+     * Continue immediately toward the left-side scoring
+     * end after collecting the loose football.
+     */
+    const carryTargetX =
+        awayBallCarrier.x - 140;
+
+    const carryTargetY =
+        Phaser.Math.Linear(
+            awayBallCarrier.y,
+            this.field.centreY,
+            0.28
+        );
+
+    const correctedTarget =
+        this.getPointInsideField(
+            carryTargetX,
+            carryTargetY
+        );
+
+    const carryDirection =
+        new Phaser.Math.Vector2(
+            correctedTarget.x -
+                awayBallCarrier.x,
+
+            correctedTarget.y -
+                awayBallCarrier.y
+        );
+
+    if (
+        carryDirection.length() > 0
+    ) {
+        carryDirection.normalize();
+    }
+
+    const carrierFatigueMultiplier =
+        this.getFatigueSpeedMultiplier(
+            awayBallCarrier
+        );
+
+    const carrySpeed =
+        this.ballCarrierSpeed *
+        (
+            this.opponentMovementMultiplier ??
+            1
+        ) *
+        carrierFatigueMultiplier;
+
+    awayBallCarrier.x +=
+        carryDirection.x *
+        carrySpeed *
+        deltaSeconds;
+
+    awayBallCarrier.y +=
+        carryDirection.y *
+        carrySpeed *
+        deltaSeconds;
+
+    this.keepObjectInsideField(
+        awayBallCarrier
+    );
+
+    return;
+}
 
     /*
  * Shared two-defender structure during home
@@ -5884,16 +5897,24 @@ if (this.hasAwayPossession()) {
      * movement must not move the ball carrier as though
      * they were the receiver.
      */
-    if (
-        ballCarrier ===
-        this.awayTeammate
-    ) {
-        this.awayTeammateData.targetX =
-            this.awayTeammate.x;
+if (
+    ballCarrier ===
+    this.awayTeammate
+) {
+    /*
+     * Light Green is currently being moved as the actual
+     * carrier inside updateOpponentChase().
+     *
+     * Do not apply support movement to the same player.
+     */
+    this.awayTeammateData.targetX =
+        this.awayTeammate.x;
 
-        this.awayTeammateData.targetY =
-            this.awayTeammate.y;
-    } else {
+    this.awayTeammateData.targetY =
+        this.awayTeammate.y;
+
+    return;
+} else {
         const awayScoringEndX =
             this.field.leftGoalLineX;
 
@@ -8638,26 +8659,33 @@ completeLooseBallPickup(receivingPlayer) {
     const previousControlledPlayer =
         this.controlledPlayer;
 
-    const receiverIsOpponent =
-        receivingPlayer ===
-        this.opponent;
+/*
+ * Either Green player can collect the loose football.
+ */
+const receiverIsAwayPlayer =
+    this.isAwayPlayer(
+        receivingPlayer
+    );
 
-    const controlWillSwitch =
-        !receiverIsOpponent &&
-        receivingPlayer !==
-            previousControlledPlayer;
+const controlWillSwitch =
+    !receiverIsAwayPlayer &&
+    receivingPlayer !==
+        previousControlledPlayer;
 
     this.setPossessionOwner(
         receivingPlayer
     );
 
-    if (receiverIsOpponent) {
-        console.log(
-            "Opponent collected the loose football."
-        );
+if (receiverIsAwayPlayer) {
+    console.log(
+        receivingPlayer ===
+            this.opponent
+            ? "Dark Green completed a running pickup."
+            : "Light Green completed a running pickup."
+    );
 
-        return;
-    }
+    return;
+}
 
     if (controlWillSwitch) {
         console.log(
