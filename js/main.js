@@ -4745,61 +4745,98 @@ this.teammateData.targetY =
         return;
     }
 
-    /*
-     * When the ball is loose, move toward it as the
-     * existing possession system decides who collects.
-     */
-    const directionToFootball =
-        new Phaser.Math.Vector2(
-            this.football.x -
-                this.supportPlayer.x,
+/*
+ * Only the closest Home player should attack the loose
+ * football.
+ *
+ * The controlled player remains under user control, so
+ * if they are closer the support player holds position.
+ */
+const controlledLooseBallDistance =
+    Phaser.Math.Distance.Between(
+        this.controlledPlayer.x,
+        this.controlledPlayer.y,
+        this.football.x,
+        this.football.y
+    );
 
-            this.football.y -
-                this.supportPlayer.y
-        );
+const supportLooseBallDistance =
+    Phaser.Math.Distance.Between(
+        this.supportPlayer.x,
+        this.supportPlayer.y,
+        this.football.x,
+        this.football.y
+    );
 
-    const distanceToFootball =
-        directionToFootball.length();
+const supportPlayerShouldChase =
+    supportLooseBallDistance <
+    controlledLooseBallDistance;
 
-    const looseBallStoppingDistance =
-        Math.max(
-            4,
-            this.ballPickupDistance - 4
-        );
-
-    if (
-        distanceToFootball >
-        looseBallStoppingDistance
-    ) {
-        directionToFootball.normalize();
-
-        const movementSpeed =
-            this.teammateData.speed *
-                this.getFatigueSpeedMultiplier(
-                    this.supportPlayer
-                );
-
-        const movementDistance =
-            Math.min(
-                movementSpeed *
-                    (delta / 1000),
-
-                distanceToFootball -
-                    looseBallStoppingDistance
-            );
-
-        this.supportPlayer.x +=
-            directionToFootball.x *
-                movementDistance;
-
-        this.supportPlayer.y +=
-            directionToFootball.y *
-                movementDistance;
-    }
+if (!supportPlayerShouldChase) {
+    this.teammateData.state =
+        "LOOSE_BALL_SUPPORT";
 
     this.keepObjectInsideField(
         this.supportPlayer
     );
+
+    return;
+}
+
+this.teammateData.state =
+    "CHASE_LOOSE";
+
+const directionToFootball =
+    new Phaser.Math.Vector2(
+        this.football.x -
+            this.supportPlayer.x,
+
+        this.football.y -
+            this.supportPlayer.y
+    );
+
+const distanceToFootball =
+    directionToFootball.length();
+
+const looseBallStoppingDistance =
+    Math.max(
+        4,
+        this.ballPickupDistance - 4
+    );
+
+if (
+    distanceToFootball >
+    looseBallStoppingDistance
+) {
+    directionToFootball.normalize();
+
+    const movementSpeed =
+        this.teammateData.speed *
+        this.getFatigueSpeedMultiplier(
+            this.supportPlayer
+        );
+
+    const movementDistance =
+        Math.min(
+            movementSpeed *
+                (delta / 1000),
+
+            distanceToFootball -
+                looseBallStoppingDistance
+        );
+
+    this.supportPlayer.x +=
+        directionToFootball.x *
+            movementDistance;
+
+    this.supportPlayer.y +=
+        directionToFootball.y *
+            movementDistance;
+}
+
+this.keepObjectInsideField(
+    this.supportPlayer
+);
 }
 
 assignLandingContestPlayers() {
@@ -5792,9 +5829,40 @@ if (this.footballInFlight) {
 }
 
 /*
- * When nobody owns the football and it is no longer
- * airborne, Green chases the loose ball.
+ * Only the closest Away player commits to the loose
+ * football.
  */
+const darkGreenLooseBallDistance =
+    Phaser.Math.Distance.Between(
+        this.opponent.x,
+        this.opponent.y,
+        this.football.x,
+        this.football.y
+    );
+
+const lightGreenLooseBallDistance =
+    Phaser.Math.Distance.Between(
+        this.awayTeammate.x,
+        this.awayTeammate.y,
+        this.football.x,
+        this.football.y
+    );
+
+const darkGreenShouldChase =
+    darkGreenLooseBallDistance <=
+    lightGreenLooseBallDistance;
+
+if (!darkGreenShouldChase) {
+    this.opponentData.state =
+        "LOOSE_BALL_COVER";
+
+    this.keepObjectInsideField(
+        this.opponent
+    );
+
+    return;
+}
+
 this.opponentData.state =
     "CHASE_LOOSE";
 
@@ -6333,12 +6401,32 @@ this.awayTeammateData.targetY =
     this.awaySupportCommittedTargetY;
 }
 
-    /*
-     * When the football is loose, continue using the
-     * existing loose-ball behaviour.
-     */
-    else {
+/*
+ * When the football is loose, only the closest Away
+ * player commits to collecting it.
+ */
+else {
+    const darkGreenLooseBallDistance =
+        Phaser.Math.Distance.Between(
+            this.opponent.x,
+            this.opponent.y,
+            this.football.x,
+            this.football.y
+        );
 
+    const lightGreenLooseBallDistance =
+        Phaser.Math.Distance.Between(
+            this.awayTeammate.x,
+            this.awayTeammate.y,
+            this.football.x,
+            this.football.y
+        );
+
+    const lightGreenShouldChase =
+        lightGreenLooseBallDistance <
+        darkGreenLooseBallDistance;
+
+    if (lightGreenShouldChase) {
         this.awayTeammateData.state =
             "CHASE_LOOSE";
 
@@ -6347,7 +6435,22 @@ this.awayTeammateData.targetY =
 
         this.awayTeammateData.targetY =
             this.football.y;
+    } else {
+        /*
+         * Dark Green is already attacking the contest.
+         * Light Green holds their current position rather
+         * than collapsing onto the same football.
+         */
+        this.awayTeammateData.state =
+            "LOOSE_BALL_COVER";
+
+        this.awayTeammateData.targetX =
+            this.awayTeammate.x;
+
+        this.awayTeammateData.targetY =
+            this.awayTeammate.y;
     }
+}
 
     const direction =
         new Phaser.Math.Vector2(
