@@ -9523,8 +9523,36 @@ restartAfterBehind() {
             supportPlayer = this.player;
         }
 
-        nearestOpponent = this.opponent;
-        secondOpponent = this.awayTeammate;
+/*
+ * The opposition player closest to the kick-in takes
+ * the mark. The other player sets up farther downfield.
+ */
+const darkGreenMarkDistance =
+    Phaser.Math.Distance.Between(
+        this.opponent.x,
+        this.opponent.y,
+        kickInX,
+        kickInY
+    );
+
+const lightGreenMarkDistance =
+    Phaser.Math.Distance.Between(
+        this.awayTeammate.x,
+        this.awayTeammate.y,
+        kickInX,
+        kickInY
+    );
+
+if (
+    darkGreenMarkDistance <=
+    lightGreenMarkDistance
+) {
+    nearestOpponent = this.opponent;
+    secondOpponent = this.awayTeammate;
+} else {
+    nearestOpponent = this.awayTeammate;
+    secondOpponent = this.opponent;
+}
     } else {
         const darkGreenDistance =
             Phaser.Math.Distance.Between(
@@ -9553,8 +9581,36 @@ restartAfterBehind() {
             supportPlayer = this.opponent;
         }
 
-        nearestOpponent = this.player;
-        secondOpponent = this.teammate;
+/*
+ * The nearest home player stands the mark for Green's
+ * kick-in while the second defender sets up downfield.
+ */
+const redMarkDistance =
+    Phaser.Math.Distance.Between(
+        this.player.x,
+        this.player.y,
+        kickInX,
+        kickInY
+    );
+
+const blueMarkDistance =
+    Phaser.Math.Distance.Between(
+        this.teammate.x,
+        this.teammate.y,
+        kickInX,
+        kickInY
+    );
+
+if (
+    redMarkDistance <=
+    blueMarkDistance
+) {
+    nearestOpponent = this.player;
+    secondOpponent = this.teammate;
+} else {
+    nearestOpponent = this.teammate;
+    secondOpponent = this.player;
+}
     }
 
     this.clearPossession();
@@ -9587,21 +9643,17 @@ restartAfterBehind() {
         kickInY - 58
     );
 
-    /*
-     * The opposition begins outside the immediate
-     * kick-in area.
-     */
-    nearestOpponent.setPosition(
-        kickInX +
-            fieldDirectionX * 70,
-        kickInY + 24
-    );
-
-    secondOpponent.setPosition(
-        kickInX +
-            fieldDirectionX * 118,
-        kickInY - 52
-    );
+/*
+ * The covering opposition player begins downfield.
+ *
+ * The closest opponent will be positioned separately
+ * on the mark after possession is awarded.
+ */
+secondOpponent.setPosition(
+    kickInX +
+        fieldDirectionX * 118,
+    kickInY - 52
+);
 
     this.keepObjectInsideField(
         kickInPlayer
@@ -9656,11 +9708,23 @@ restartAfterBehind() {
      * Give the defending player possession for the
      * kick-in.
      */
-    this.setPossessionOwner(
-        kickInPlayer
-    );
+this.setPossessionOwner(
+    kickInPlayer
+);
 
-    /*
+/*
+ * Place the nearest opposition player directly in front
+ * of the kicker at the top of the goal-square area.
+ *
+ * The existing free-kick mark system will keep them
+ * stationary until the kick-in disposal passes them.
+ */
+this.setupFreeKickPlayerOnMark(
+    kickInPlayer,
+    nearestOpponent
+);
+
+/*
  * The score animation has finished. Allow the normal
  * possession system to display the football with the
  * kick-in player.
