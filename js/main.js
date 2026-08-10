@@ -9157,8 +9157,15 @@ const distanceFromGoalCentre =
  * The posts themselves are 6 pixels thick and the
  * football is approximately 9 pixels tall.
  */
-const goalPostHitTolerance = 8;
-const behindPostHitTolerance = 8;
+/*
+ * Keep post collisions fairly precise.
+ *
+ * A smaller tolerance prevents kicks that clearly pass
+ * inside the scoring corridor from being incorrectly
+ * classified as hitting the post.
+ */
+const goalPostHitTolerance = 4;
+const behindPostHitTolerance = 4;
 
 /*
  * Measure the centre of the football against the
