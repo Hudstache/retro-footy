@@ -4768,70 +4768,137 @@ const supportLooseBallDistance =
         this.football.y
     );
 
+/*
+ * Decide whether the support player or controlled
+ * player is currently closer to the loose football.
+ */
 const supportPlayerShouldChase =
     supportLooseBallDistance <
     controlledLooseBallDistance;
 
-if (!supportPlayerShouldChase) {
+if (supportPlayerShouldChase) {
+    this.teammateData.state =
+        "CHASE_LOOSE";
+
+    const directionToFootball =
+        new Phaser.Math.Vector2(
+            this.football.x -
+                this.supportPlayer.x,
+
+            this.football.y -
+                this.supportPlayer.y
+        );
+
+    const distanceToFootball =
+        directionToFootball.length();
+
+    const looseBallStoppingDistance =
+        Math.max(
+            4,
+            this.ballPickupDistance - 4
+        );
+
+    if (
+        distanceToFootball >
+        looseBallStoppingDistance
+    ) {
+        directionToFootball.normalize();
+
+        const movementSpeed =
+            this.teammateData.speed *
+            this.getFatigueSpeedMultiplier(
+                this.supportPlayer
+            );
+
+        const movementDistance =
+            Math.min(
+                movementSpeed *
+                    (delta / 1000),
+
+                distanceToFootball -
+                    looseBallStoppingDistance
+            );
+
+        this.supportPlayer.x +=
+            directionToFootball.x *
+                movementDistance;
+
+        this.supportPlayer.y +=
+            directionToFootball.y *
+                movementDistance;
+    }
+} else {
+    /*
+     * Follow the contest from a forward support position.
+     */
     this.teammateData.state =
         "LOOSE_BALL_SUPPORT";
 
-    this.keepObjectInsideField(
-        this.supportPlayer
-    );
+    const looseBallSupportDistance = 62;
+    const looseBallSupportLateralOffset = 34;
 
-    return;
-}
+    const supportTargetX =
+        this.football.x +
+        looseBallSupportDistance;
 
-this.teammateData.state =
-    "CHASE_LOOSE";
-
-const directionToFootball =
-    new Phaser.Math.Vector2(
-        this.football.x -
-            this.supportPlayer.x,
-
-        this.football.y -
-            this.supportPlayer.y
-    );
-
-const distanceToFootball =
-    directionToFootball.length();
-
-const looseBallStoppingDistance =
-    Math.max(
-        4,
-        this.ballPickupDistance - 4
-    );
-
-if (
-    distanceToFootball >
-    looseBallStoppingDistance
-) {
-    directionToFootball.normalize();
-
-    const movementSpeed =
-        this.teammateData.speed *
-        this.getFatigueSpeedMultiplier(
-            this.supportPlayer
+    const supportTargetY =
+        this.football.y +
+        (
+            this.supportPlayer.y <=
+            this.football.y
+                ? -looseBallSupportLateralOffset
+                : looseBallSupportLateralOffset
         );
 
-    const movementDistance =
-        Math.min(
-            movementSpeed *
-                (delta / 1000),
-
-            distanceToFootball -
-                looseBallStoppingDistance
+    const correctedSupportTarget =
+        this.getPointInsideField(
+            supportTargetX,
+            supportTargetY
         );
 
-    this.supportPlayer.x +=
-        directionToFootball.x *
-            movementDistance;
+    const directionToSupportTarget =
+        new Phaser.Math.Vector2(
+            correctedSupportTarget.x -
+                this.supportPlayer.x,
 
-    this.supportPlayer.y +=
-        directionToFootball.y *
-            movementDistance;
+            correctedSupportTarget.y -
+                this.supportPlayer.y
+        );
+
+    const distanceToSupportTarget =
+        directionToSupportTarget.length();
+
+    const supportStoppingDistance = 8;
+
+    if (
+        distanceToSupportTarget >
+        supportStoppingDistance
+    ) {
+        directionToSupportTarget.normalize();
+
+        const movementSpeed =
+            this.teammateData.speed *
+            this.getFatigueSpeedMultiplier(
+                this.supportPlayer
+            );
+
+        const movementDistance =
+            Math.min(
+                movementSpeed *
+                    (delta / 1000),
+
+                distanceToSupportTarget -
+                    supportStoppingDistance
+            );
+
+        this.supportPlayer.x +=
+            directionToSupportTarget.x *
+                movementDistance;
+
+        this.supportPlayer.y +=
+            directionToSupportTarget.y *
+                movementDistance;
+    }
 }
 
 this.keepObjectInsideField(
@@ -5853,8 +5920,79 @@ const darkGreenShouldChase =
     lightGreenLooseBallDistance;
 
 if (!darkGreenShouldChase) {
+    /*
+     * Light Green is attacking the loose ball.
+     * Dark Green follows from a useful passing position
+     * toward the left-side scoring end.
+     */
     this.opponentData.state =
-        "LOOSE_BALL_COVER";
+        "LOOSE_BALL_SUPPORT";
+
+    const looseBallSupportDistance = 62;
+    const looseBallSupportLateralOffset = 34;
+
+    const supportTargetX =
+        this.football.x -
+        looseBallSupportDistance;
+
+    const supportTargetY =
+        this.football.y +
+        (
+            this.opponent.y <=
+            this.football.y
+                ? -looseBallSupportLateralOffset
+                : looseBallSupportLateralOffset
+        );
+
+    const correctedSupportTarget =
+        this.getPointInsideField(
+            supportTargetX,
+            supportTargetY
+        );
+
+    const directionToSupportTarget =
+        new Phaser.Math.Vector2(
+            correctedSupportTarget.x -
+                this.opponent.x,
+
+            correctedSupportTarget.y -
+                this.opponent.y
+        );
+
+    const distanceToSupportTarget =
+        directionToSupportTarget.length();
+
+    const supportStoppingDistance = 8;
+
+    if (
+        distanceToSupportTarget >
+        supportStoppingDistance
+    ) {
+        directionToSupportTarget.normalize();
+
+        const movementSpeed =
+            this.opponentData.speed *
+            this.getFatigueSpeedMultiplier(
+                this.opponent
+            );
+
+        const movementDistance =
+            Math.min(
+                movementSpeed *
+                    deltaSeconds,
+
+                distanceToSupportTarget -
+                    supportStoppingDistance
+            );
+
+        this.opponent.x +=
+            directionToSupportTarget.x *
+                movementDistance;
+
+        this.opponent.y +=
+            directionToSupportTarget.y *
+                movementDistance;
+    }
 
     this.keepObjectInsideField(
         this.opponent
@@ -6437,18 +6575,50 @@ else {
             this.football.y;
     } else {
         /*
-         * Dark Green is already attacking the contest.
-         * Light Green holds their current position rather
-         * than collapsing onto the same football.
+         * Dark Green attacks the loose football.
+         *
+         * Light Green follows the contest from a useful
+         * attacking position without collapsing onto
+         * the football.
          */
         this.awayTeammateData.state =
-            "LOOSE_BALL_COVER";
+            "LOOSE_BALL_SUPPORT";
+
+        const looseBallSupportDistance = 62;
+        const looseBallSupportLateralOffset = 34;
+
+        /*
+         * Away attacks toward the left scoring end,
+         * so place the support option ahead of the ball.
+         */
+        const supportTargetX =
+            this.football.x -
+            looseBallSupportDistance;
+
+        /*
+         * Stay on the same general side of the contest
+         * to avoid unnecessary crossing behind the chaser.
+         */
+        const supportTargetY =
+            this.football.y +
+            (
+                this.awayTeammate.y <=
+                this.football.y
+                    ? -looseBallSupportLateralOffset
+                    : looseBallSupportLateralOffset
+            );
+
+        const correctedSupportTarget =
+            this.getPointInsideField(
+                supportTargetX,
+                supportTargetY
+            );
 
         this.awayTeammateData.targetX =
-            this.awayTeammate.x;
+            correctedSupportTarget.x;
 
         this.awayTeammateData.targetY =
-            this.awayTeammate.y;
+            correctedSupportTarget.y;
     }
 }
 
