@@ -9051,25 +9051,19 @@ updateScoreDetection(
             this.lastDisposalPlayer
         );
 
-    /*
-     * Ignore a kick crossing the wrong scoring end.
-     *
-     * Home scores only at the right-side goals.
-     * Away scores only at the left-side goals.
-     */
-    if (
+/*
+ * A disposal through the player's own defensive scoring
+ * end concedes a behind to the team attacking that end.
+ */
+const isWrongEndDisposal =
+    (
         crossedRightGoalLine &&
-        !kickWasHomeDisposal
-    ) {
-        return;
-    }
-
-    if (
+        kickWasAwayDisposal
+    ) ||
+    (
         crossedLeftGoalLine &&
-        !kickWasAwayDisposal
-    ) {
-        return;
-    }
+        kickWasHomeDisposal
+    );
 
 /*
  * Calculate the exact point where the football crossed
@@ -9157,15 +9151,26 @@ const hitBehindPost =
 let scoreResult = null;
 
 /*
- * Deterministic scoring priority:
+ * Scoring priority:
  *
- * 1. Goal-post contact = behind
- * 2. Between goal posts = goal
- * 3. Behind-post contact = out of bounds
- * 4. Between goal and behind posts = behind
- * 5. Outside behind posts = out of bounds
+ * A behind-post hit remains out of bounds.
+ *
+ * Any other wrong-end scoring disposal inside the
+ * behind posts concedes one behind regardless of
+ * whether it passed through the goal or behind area.
  */
-if (hitGoalPost) {
+if (hitBehindPost) {
+    scoreResult =
+        "BEHIND_POST";
+} else if (
+    isWrongEndDisposal &&
+    distanceFromGoalCentre <
+        behindPostOffset -
+            behindPostHitTolerance
+) {
+    scoreResult =
+        "BEHIND";
+} else if (hitGoalPost) {
     scoreResult =
         "HIT_POST";
 } else if (
@@ -9175,9 +9180,6 @@ if (hitGoalPost) {
 ) {
     scoreResult =
         "GOAL";
-} else if (hitBehindPost) {
-    scoreResult =
-        "BEHIND_POST";
 } else if (
     distanceFromGoalCentre <
     behindPostOffset -
